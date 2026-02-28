@@ -1,0 +1,224 @@
+# ============================================================================
+# Pi Nextcloud Stack — Docker Compose
+# ============================================================================
+# Personal cloud + file sync on Raspberry Pi 5 with NVMe SSD:
+#   - Nextcloud        → file hosting, sync, web UI
+#   - PostgreSQL 16    → metadata database
+#   - Redis 7          → PHP session & file-lock caching
+#   - Caddy 2          → reverse proxy with automatic HTTPS
+#
+# All heavy I/O (data + database) is mapped to the NVMe drive.
+#
+# Usage:
+#   docker compose up -d
+#   docker compose logs -f
+#   docker compose down
+# ============================================================================
+
+services:
+  # --------------------------------------------------------------------------
+  # PostgreSQL 16 — Nextcloud Metadata Database
+  # --------------------------------------------------------------------------
+  postgres_nextcloud:
+    image: postgres:16-alpine
+    container_name: postgres_nextcloud
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-nextcloud}
+      POSTGRES_USER: ${POSTGRES_USER:-nc_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+      TZ: ${TZ:-Asia/Riyadh}
+    ports:
+      - "${POSTGRES_PORT:-5437}:5432"
+    volumes:
+      # Database on NVMe for fast I/O
+      - ${NVME_MOUNT:-/mnt/nvme}/nextcloud/db:/var/lib/postgresql/data
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U ${POSTGRES_USER:-nc_user} -d ${POSTGRES_DB:-nextcloud}",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    networks:
+      - nextcloud_net
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+
+  # --------------------------------------------------------------------------
+  # Redis 7 — Session Cache & File Locking
+  # --------------------------------------------------------------------------
+  redis_nextcloud:
+    image: redis:7-alpine
+    container_name: redis_nextcloud
+    restart: unless-stopped
+    command: redis-server --maxmemory 128mb --maxmemory-policy allkeys-lru
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    networks:
+      - nextcloud_net
+    deploy:
+      resources:
+        limits:
+          memory: 192M
+
+  # --------------------------------------------------------------------------
+  # Nextcloud — Personal Cloud
+  # --------------------------------------------------------------------------
+  nextcloud:
+    image: nextcloud:stable-apache
+    container_name: nextcloud
+    restart: unless-stopped
+    environment:
+      # ── Database ──
+      POSTGRES_HOST: postgres_nextcloud
+      POSTGRES_DB: ${POSTGRES_DB:-nextcloud}
+      POSTGRES_USER: ${POSTGRES_USER:-nc_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+
+      # ── Redis ──
+      REDIS_HOST: redis_nextcloud
+      REDIS_HOST_PORT: 6379
+
+      # ── Admin ──
+      NEXTCLOUD_ADMIN_USER: ${NEXTCLOUD_ADMIN_USER:-admin}
+      NEXTCLOUD_ADMIN_PASSWORD: ${NEXTCLOUD_ADMIN_PASSWORD:?NEXTCLOUD_ADMIN_PASSWORD is required}
+
+      # ── Trusted Domains ──
+      NEXTCLOUD_TRUSTED_DOMAINS: >-
+        ${HOST_IP:-192.168.1.100}
+        ${NEXTCLOUD_DOMAIN:-cloud.example.com}
+        localhost
+
+      # ── Reverse Proxy ──
+      OVERWRITEPROTOCOL: https
+      OVERWRITEHOST: ${NEXTCLOUD_DOMAIN:-cloud.example.com}
+      TRUSTED_PROXIES: caddy_nextcloud
+
+      # ── PHP Tuning for Pi 5 ──
+      PHP_MEMORY_LIMIT: 512M
+      PHP_UPLOAD_LIMIT: 16G
+
+      # ── Timezone ──
+      TZ: ${TZ:-Asia/Riyadh}
+    ports:
+      # Direct LAN access (bypasses Caddy)
+      - "${NEXTCLOUD_PORT:-8443}:80"
+    volumes:
+      # Nextcloud application + data on NVMe
+      - ${NVME_MOUNT:-/mnt/nvme}/nextcloud/html:/var/www/html
+      - ${NVME_MOUNT:-/mnt/nvme}/nextcloud/data:/var/www/html/data
+
+      # AI content directories — written by n8n pipelines, read by Nextcloud
+      - ${NVME_MOUNT:-/mnt/nvme}/ai-content/youtube:/var/www/html/data/${NEXTCLOUD_ADMIN_USER:-admin}/files/ai-content/youtube
+      - ${NVME_MOUNT:-/mnt/nvme}/ai-content/tiktok:/var/www/html/data/${NEXTCLOUD_ADMIN_USER:-admin}/files/ai-content/tiktok
+      - ${NVME_MOUNT:-/mnt/nvme}/ai-content/instagram:/var/www/html/data/${NEXTCLOUD_ADMIN_USER:-admin}/files/ai-content/instagram
+      - ${NVME_MOUNT:-/mnt/nvme}/ai-content/x:/var/www/html/data/${NEXTCLOUD_ADMIN_USER:-admin}/files/ai-content/x
+
+      # Custom PHP config for performance
+      - ./config/php-tuning.ini:/usr/local/etc/php/conf.d/zzz-pi-tuning.ini:ro
+    depends_on:
+      postgres_nextcloud:
+        condition: service_healthy
+      redis_nextcloud:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          'curl -sf http://localhost/status.php | grep -q ''"installed":true'' || exit 1',
+        ]
+      interval: 30s
+      timeout: 15s
+      retries: 5
+      start_period: 120s
+    networks:
+      - nextcloud_net
+    deploy:
+      resources:
+        limits:
+          memory: 1024M
+
+  # --------------------------------------------------------------------------
+  # Caddy 2 — Reverse Proxy with Auto-HTTPS
+  # --------------------------------------------------------------------------
+  caddy_nextcloud:
+    image: caddy:2-alpine
+    container_name: caddy_nextcloud
+    restart: unless-stopped
+    environment:
+      NEXTCLOUD_DOMAIN: ${NEXTCLOUD_DOMAIN:-cloud.example.com}
+      TZ: ${TZ:-Asia/Riyadh}
+    ports:
+      - "${CADDY_HTTP_PORT:-80}:80"
+      - "${CADDY_HTTPS_PORT:-443}:443"
+    volumes:
+      - ./caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      nextcloud:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:2019/metrics || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+    networks:
+      - nextcloud_net
+    deploy:
+      resources:
+        limits:
+          memory: 128M
+
+  # --------------------------------------------------------------------------
+  # Nextcloud Cron — Background Jobs
+  # --------------------------------------------------------------------------
+  nextcloud_cron:
+    image: nextcloud:stable-apache
+    container_name: nextcloud_cron
+    restart: unless-stopped
+    entrypoint: /cron.sh
+    environment:
+      TZ: ${TZ:-Asia/Riyadh}
+    volumes:
+      - ${NVME_MOUNT:-/mnt/nvme}/nextcloud/html:/var/www/html
+      - ${NVME_MOUNT:-/mnt/nvme}/nextcloud/data:/var/www/html/data
+      - ${NVME_MOUNT:-/mnt/nvme}/ai-content/youtube:/var/www/html/data/${NEXTCLOUD_ADMIN_USER:-admin}/files/ai-content/youtube
+      - ${NVME_MOUNT:-/mnt/nvme}/ai-content/tiktok:/var/www/html/data/${NEXTCLOUD_ADMIN_USER:-admin}/files/ai-content/tiktok
+      - ${NVME_MOUNT:-/mnt/nvme}/ai-content/instagram:/var/www/html/data/${NEXTCLOUD_ADMIN_USER:-admin}/files/ai-content/instagram
+      - ${NVME_MOUNT:-/mnt/nvme}/ai-content/x:/var/www/html/data/${NEXTCLOUD_ADMIN_USER:-admin}/files/ai-content/x
+    depends_on:
+      nextcloud:
+        condition: service_healthy
+    networks:
+      - nextcloud_net
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+
+# ----------------------------------------------------------------------------
+# Volumes
+# ----------------------------------------------------------------------------
+volumes:
+  caddy_data:
+    driver: local
+  caddy_config:
+    driver: local
+
+# ----------------------------------------------------------------------------
+# Network — isolated bridge for the Nextcloud stack
+# ----------------------------------------------------------------------------
+networks:
+  nextcloud_net:
+    driver: bridge

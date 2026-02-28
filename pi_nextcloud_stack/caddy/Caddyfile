@@ -1,0 +1,73 @@
+# ============================================================================
+# Caddy — Reverse Proxy for Nextcloud
+# ============================================================================
+# Auto-HTTPS via Let's Encrypt. Forwards all traffic to Nextcloud container.
+#
+# Prerequisites for external access:
+#   1. Domain DNS A record → your public IP
+#   2. Router port-forward: 80 → Pi:80, 443 → Pi:443
+#   3. Set NEXTCLOUD_DOMAIN in .env
+#
+# For local-only: access Nextcloud directly at http://<pi-ip>:8443
+# ============================================================================
+
+{$NEXTCLOUD_DOMAIN:cloud.example.com} {
+    # ── Reverse proxy to Nextcloud container ──
+    reverse_proxy nextcloud:80
+
+    # ── Security headers ──
+    header {
+        Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+        X-Content-Type-Options "nosniff"
+        X-Frame-Options "SAMEORIGIN"
+        Referrer-Policy "strict-origin-when-cross-origin"
+        X-Robots-Tag "noindex, nofollow"
+        -Server
+    }
+
+    # ── WebDAV / CalDAV / CardDAV rewrites ──
+    redir /.well-known/carddav /remote.php/dav/ 301
+    redir /.well-known/caldav /remote.php/dav/ 301
+    redir /.well-known/webfinger /index.php/.well-known/webfinger 301
+    redir /.well-known/nodeinfo /index.php/.well-known/nodeinfo 301
+
+    # ── Block access to sensitive paths ──
+    @blocked {
+        path /build/*
+        path /tests/*
+        path /config/*
+        path /lib/*
+        path /3rdparty/*
+        path /templates/*
+        path /data/*
+        path /.htaccess
+        path /autotest
+        path /occ
+        path /issue
+        path /indie
+        path /db_structure
+        path /console
+    }
+    respond @blocked 404
+
+    # ── Enable compression ──
+    encode gzip zstd
+
+    # ── Request body size (must match PHP limits) ──
+    request_body {
+        max_size 16GB
+    }
+
+    # ── Logging ──
+    log {
+        output file /data/access.log {
+            roll_size 10MB
+            roll_keep 5
+        }
+    }
+}
+
+# ── Admin API (internal metrics) ──
+:2019 {
+    metrics
+}
