@@ -1,0 +1,30 @@
+# ============================================================================
+# Homepage — Global Settings
+# ============================================================================
+
+title: Pi Command Center
+description: Raspberry Pi 5 — Service Dashboard & Monitoring
+
+theme: dark
+color: slate
+
+language: en
+
+layout:
+  Content Pipelines:
+    style: row
+    columns: 4
+  Network & Infrastructure:
+    style: row
+    columns: 2
+  Monitoring:
+    style: row
+    columns: 2
+
+headerStyle: clean
+
+cardBlur: md
+
+hideVersion: true
+
+target: _blank

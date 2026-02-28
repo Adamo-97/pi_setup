@@ -1,0 +1,90 @@
+# ============================================================================
+# Pi Command Center — Docker Compose
+# ============================================================================
+# Unified monitoring & dashboard stack for Raspberry Pi 5:
+#   - Homepage       → visual dashboard with service links & status widgets
+#   - Uptime Kuma    → health monitoring with Slack emergency alerts
+#
+# Usage:
+#   docker compose up -d
+#   docker compose logs -f
+#   docker compose down
+# ============================================================================
+
+services:
+  # --------------------------------------------------------------------------
+  # Homepage — Dashboard UI
+  # --------------------------------------------------------------------------
+  homepage:
+    image: ghcr.io/gethomepage/homepage:latest
+    container_name: homepage
+    restart: unless-stopped
+    environment:
+      TZ: ${TZ:-Asia/Riyadh}
+      HOMEPAGE_ALLOWED_HOSTS: "*"
+    ports:
+      - "${HOMEPAGE_PORT:-3010}:3000"
+    volumes:
+      # Config directory (services, widgets, bookmarks, settings)
+      - ./homepage:/app/config
+      # Docker socket — enables container status widgets
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:3000 || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+    networks:
+      - command_center_net
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+
+  # --------------------------------------------------------------------------
+  # Uptime Kuma — Health Monitoring & Alerting
+  # --------------------------------------------------------------------------
+  uptime_kuma:
+    image: louislam/uptime-kuma:1
+    container_name: uptime_kuma
+    restart: unless-stopped
+    environment:
+      TZ: ${TZ:-Asia/Riyadh}
+    ports:
+      - "${UPTIME_KUMA_PORT:-3001}:3001"
+    volumes:
+      # Persistent monitoring data (monitors, incidents, settings)
+      - uptime_kuma_data:/app/data
+      # Docker socket — enables Docker container monitoring
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "wget -qO- http://localhost:3001/api/status-page/heartbeat || exit 1",
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    networks:
+      - command_center_net
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+
+# ----------------------------------------------------------------------------
+# Volumes
+# ----------------------------------------------------------------------------
+volumes:
+  uptime_kuma_data:
+    driver: local
+
+# ----------------------------------------------------------------------------
+# Network — isolated bridge for the command center
+# ----------------------------------------------------------------------------
+networks:
+  command_center_net:
+    driver: bridge

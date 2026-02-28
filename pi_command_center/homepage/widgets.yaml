@@ -1,0 +1,21 @@
+# ============================================================================
+# Homepage — System Widgets (top bar)
+# ============================================================================
+
+- resources:
+    label: Raspberry Pi 5
+    cpu: true
+    memory: true
+    disk: /
+    uptime: true
+
+- datetime:
+    text_size: xl
+    format:
+      dateStyle: long
+      timeStyle: short
+      hour12: false
+
+- search:
+    provider: google
+    target: _blank

@@ -1,0 +1,9 @@
+# ============================================================================
+# Homepage — Docker Integration
+# ============================================================================
+# Connects to the host Docker socket to show container status.
+# The socket is mounted read-only in docker-compose.yml.
+# ============================================================================
+
+pi-docker:
+  socket: /var/run/docker.sock

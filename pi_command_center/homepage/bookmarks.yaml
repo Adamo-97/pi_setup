@@ -1,0 +1,30 @@
+# ============================================================================
+# Homepage — Bookmarks
+# ============================================================================
+
+- Developer:
+    - GitHub Repo:
+        - icon: github.svg
+          href: https://github.com/Adamo-97/pi_setup
+          description: pi_setup repository
+
+    - Docker Hub:
+        - icon: docker.svg
+          href: https://hub.docker.com
+          description: Container registry
+
+- Documentation:
+    - Pi-hole Docs:
+        - icon: pi-hole.svg
+          href: https://docs.pi-hole.net
+          description: Pi-hole documentation
+
+    - Uptime Kuma Wiki:
+        - icon: uptime-kuma.svg
+          href: https://github.com/louislam/uptime-kuma/wiki
+          description: Uptime Kuma documentation
+
+    - Homepage Docs:
+        - icon: homepage.svg
+          href: https://gethomepage.dev
+          description: Homepage dashboard docs

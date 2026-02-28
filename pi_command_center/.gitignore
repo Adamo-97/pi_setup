@@ -1,0 +1,19 @@
+# Environment
+.env
+
+# Uptime Kuma data
+uptime_kuma_data/
+
+# Logs
+*.log
+logs/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/
+*.swp
+*.swo
+*~
