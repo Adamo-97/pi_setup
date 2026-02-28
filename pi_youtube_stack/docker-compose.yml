@@ -1,0 +1,121 @@
+# ============================================================================
+# YouTube Content Generation Stack — Docker Compose
+# ============================================================================
+# Fully isolated stack for Raspberry Pi 5:
+#   - PostgreSQL 16 with pgvector extension (for RAG)
+#   - n8n workflow automation (trigger & orchestration)
+#
+# Usage:
+#   docker compose up -d
+#   docker compose logs -f
+#   docker compose down
+# ============================================================================
+
+services:
+  # --------------------------------------------------------------------------
+  # PostgreSQL 16 + pgvector — RAG Database
+  # --------------------------------------------------------------------------
+  postgres_youtube:
+    image: pgvector/pgvector:pg16
+    container_name: postgres_youtube
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-youtube_rag}
+      POSTGRES_USER: ${POSTGRES_USER:-yt_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+      TZ: ${TZ:-Asia/Riyadh}
+    ports:
+      - "${POSTGRES_PORT:-5433}:5432"
+    volumes:
+      # Persistent data storage
+      - postgres_youtube_data:/var/lib/postgresql/data
+      # Auto-run schema initialization on first start
+      - ./database/init.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U ${POSTGRES_USER:-yt_user} -d ${POSTGRES_DB:-youtube_rag}",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    networks:
+      - youtube_stack_net
+    # Raspberry Pi memory constraints
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+
+  # --------------------------------------------------------------------------
+  # n8n — Workflow Automation & Trigger Engine
+  # --------------------------------------------------------------------------
+  n8n_youtube:
+    image: n8nio/n8n:latest
+    container_name: n8n_youtube
+    restart: unless-stopped
+    environment:
+      # Basic auth for the n8n web UI
+      N8N_BASIC_AUTH_ACTIVE: "true"
+      N8N_BASIC_AUTH_USER: ${N8N_BASIC_AUTH_USER:-admin}
+      N8N_BASIC_AUTH_PASSWORD: ${N8N_BASIC_AUTH_PASSWORD:?N8N_BASIC_AUTH_PASSWORD is required}
+      # Encryption key for credentials stored in n8n
+      N8N_ENCRYPTION_KEY: ${N8N_ENCRYPTION_KEY:?N8N_ENCRYPTION_KEY is required}
+      # Use the isolated PostgreSQL for n8n's own data (optional, default SQLite)
+      # DB_TYPE: postgresdb
+      # DB_POSTGRESDB_HOST: postgres_youtube
+      # DB_POSTGRESDB_PORT: 5432
+      # DB_POSTGRESDB_DATABASE: ${POSTGRES_DB:-youtube_rag}
+      # DB_POSTGRESDB_USER: ${POSTGRES_USER:-yt_user}
+      # DB_POSTGRESDB_PASSWORD: ${POSTGRES_PASSWORD}
+      # Webhook URL (accessible from Slack callbacks)
+      WEBHOOK_URL: ${N8N_BASE_URL:-http://n8n_youtube:5678}
+      # Timezone
+      GENERIC_TIMEZONE: ${TZ:-Asia/Riyadh}
+      TZ: ${TZ:-Asia/Riyadh}
+      # Allow executing local commands (needed for Python scripts)
+      N8N_PROCESS_MODE: main
+      EXECUTIONS_MODE: regular
+    ports:
+      - "5678:5678"
+    volumes:
+      # Persistent n8n data (workflows, credentials)
+      - n8n_youtube_data:/home/node/.n8n
+      # Mount the project directory so n8n can execute Python scripts
+      - ./:/home/node/youtube_stack:ro
+      # Mount output directory as read-write for generated files
+      - ./output:/home/node/youtube_stack/output:rw
+    depends_on:
+      postgres_youtube:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:5678/healthz || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    networks:
+      - youtube_stack_net
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+
+# ----------------------------------------------------------------------------
+# Volumes — persistent data across container restarts
+# ----------------------------------------------------------------------------
+volumes:
+  postgres_youtube_data:
+    driver: local
+  n8n_youtube_data:
+    driver: local
+
+# ----------------------------------------------------------------------------
+# Network — isolated bridge network for this stack
+# ----------------------------------------------------------------------------
+networks:
+  youtube_stack_net:
+    driver: bridge
+    name: youtube_stack_net

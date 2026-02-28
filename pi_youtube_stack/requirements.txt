@@ -1,0 +1,30 @@
+# ============================================================
+# pi_youtube_stack — Python Dependencies
+# ============================================================
+# Install inside a virtualenv:
+#   python3 -m venv .venv
+#   source .venv/bin/activate
+#   pip install -r requirements.txt
+# ============================================================
+
+# --- Google Gemini AI ---
+google-generativeai>=0.8.0
+
+# --- Database ---
+psycopg2-binary>=2.9.9
+
+# --- Data Validation ---
+pydantic>=2.7.0
+
+# --- Environment Variables ---
+python-dotenv>=1.0.1
+
+# --- HTTP Requests (RAWG, Slack, ElevenLabs) ---
+requests>=2.32.0
+
+# --- n8n Webhook Utilities (optional) ---
+# flask>=3.0         # only if you add a local webhook server later
+
+# --- Dev / Debug (optional) ---
+# ipython
+# rich

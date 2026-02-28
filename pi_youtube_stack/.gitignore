@@ -1,0 +1,23 @@
+# Ignore secrets
+.env
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+.venv/
+venv/
+# Output files (generated content)
+output/scripts/*.json
+output/voiceovers/*.wav
+output/metadata/*.json
+# Logs
+logs/*.log
+# Docker
+postgres_youtube_data/
+n8n_youtube_data/
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo

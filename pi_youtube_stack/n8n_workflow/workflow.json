@@ -1,0 +1,434 @@
+{
+  "name": "YouTube Content Pipeline",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "triggerAtDay": 25,
+              "triggerAtHour": 10
+            }
+          ]
+        }
+      },
+      "id": "schedule-monthly",
+      "name": "Monthly Schedule (25th)",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [200, 200],
+      "notes": "Triggers on the 25th of every month at 10:00 AM for monthly_releases content."
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "trigger-pipeline",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-manual",
+      "name": "Manual Trigger Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [200, 500],
+      "webhookId": "trigger-pipeline",
+      "notes": "POST /webhook/trigger-pipeline with JSON body: {\"content_type\": \"...\", \"year\": 2025, \"month\": 1, \"game_slug\": \"...\"}"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Merge scheduled and manual triggers into a unified format\nconst input = $input.first().json;\n\nlet contentType, year, month, gameSlug, triggerSource;\n\nif ($('Monthly Schedule (25th)').isExecuted) {\n  const now = new Date();\n  contentType = 'monthly_releases';\n  year = now.getFullYear();\n  month = now.getMonth() + 1;\n  gameSlug = '';\n  triggerSource = 'schedule';\n} else {\n  contentType = input.content_type || 'monthly_releases';\n  year = input.year || new Date().getFullYear();\n  month = input.month || new Date().getMonth() + 1;\n  gameSlug = input.game_slug || '';\n  triggerSource = 'manual';\n}\n\nreturn [{\n  json: {\n    content_type: contentType,\n    year: year,\n    month: month,\n    game_slug: gameSlug,\n    trigger_source: triggerSource\n  }\n}];"
+      },
+      "id": "normalize-input",
+      "name": "Normalize Input",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [450, 350]
+    },
+    {
+      "parameters": {
+        "command": "={{ 'cd /home/node/project && /home/node/project/.venv/bin/python3 scripts/fetch_game_data.py --type ' + $json.content_type + ' --year ' + $json.year + ' --month ' + $json.month + ($json.game_slug ? ' --game-slug ' + $json.game_slug : '') }}"
+      },
+      "id": "fetch-games",
+      "name": "1. Fetch Game Data",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [700, 350],
+      "notes": "Calls RAWG API, stores games in local DB, returns JSON summary."
+    },
+    {
+      "parameters": {
+        "jsCode": "const output = $input.first().json;\nlet result;\n\ntry {\n  // stdout holds our JSON\n  result = JSON.parse(output.stdout);\n} catch (e) {\n  throw new Error('Failed to parse fetch_game_data output: ' + output.stdout);\n}\n\nif (!result.success) {\n  throw new Error('Fetch game data failed: ' + JSON.stringify(result));\n}\n\nreturn [{ json: { ...result, ...$('Normalize Input').first().json } }];"
+      },
+      "id": "parse-fetch",
+      "name": "Parse Fetch Result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [950, 350]
+    },
+    {
+      "parameters": {
+        "command": "={{ 'cd /home/node/project && /home/node/project/.venv/bin/python3 scripts/generate_script.py --type ' + $json.content_type + ' --year ' + $json.year + ' --month ' + $json.month + ($json.game_slug ? ' --game-slug ' + $json.game_slug : '') + ' --trigger ' + $json.trigger_source }}"
+      },
+      "id": "generate-script",
+      "name": "2. Generate Script",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [1200, 350],
+      "notes": "Writer Agent generates Arabic YouTube script via Gemini."
+    },
+    {
+      "parameters": {
+        "jsCode": "const output = $input.first().json;\nlet result;\n\ntry {\n  result = JSON.parse(output.stdout);\n} catch (e) {\n  throw new Error('Failed to parse generate_script output: ' + output.stdout);\n}\n\nif (!result.success) {\n  throw new Error('Script generation failed: ' + JSON.stringify(result));\n}\n\nreturn [{ json: result }];"
+      },
+      "id": "parse-script",
+      "name": "Parse Script Result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1450, 350]
+    },
+    {
+      "parameters": {
+        "command": "={{ 'cd /home/node/project && /home/node/project/.venv/bin/python3 scripts/validate_script.py --script-id ' + $json.script_id }}"
+      },
+      "id": "validate-script",
+      "name": "3. Validate Script",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [1700, 350],
+      "notes": "Validator Agent reviews the script. If approved, sends Slack Step 1 approval request."
+    },
+    {
+      "parameters": {
+        "jsCode": "const output = $input.first().json;\nlet result;\n\ntry {\n  result = JSON.parse(output.stdout);\n} catch (e) {\n  throw new Error('Failed to parse validate_script output: ' + output.stdout);\n}\n\nreturn [{ json: result }];"
+      },
+      "id": "parse-validation",
+      "name": "Parse Validation",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1950, 350]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "approved-check",
+              "leftValue": "={{ $json.approved }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "check-approved",
+      "name": "Approved?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [2200, 350]
+    },
+    {
+      "parameters": {
+        "command": "={{ 'cd /home/node/project && /home/node/project/.venv/bin/python3 scripts/generate_metadata.py --script-id ' + $json.script_id }}"
+      },
+      "id": "generate-metadata",
+      "name": "4. Generate Metadata",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [2500, 200],
+      "notes": "Metadata Agent generates titles, description, tags, hashtags, game info cards."
+    },
+    {
+      "parameters": {
+        "command": "={{ 'cd /home/node/project && /home/node/project/.venv/bin/python3 scripts/generate_voiceover.py --script-id ' + $json.script_id }}"
+      },
+      "id": "generate-voiceover",
+      "name": "5. Generate Voiceover",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [2500, 500],
+      "notes": "ElevenLabs TTS. Sends Slack Step 2 approval for audio review."
+    },
+    {
+      "parameters": {
+        "jsCode": "const metaOut = $('4. Generate Metadata').first().json;\nconst audioOut = $('5. Generate Voiceover').first().json;\n\nlet metaResult, audioResult;\n\ntry {\n  metaResult = JSON.parse(metaOut.stdout);\n} catch { metaResult = { error: 'parse_failed' }; }\n\ntry {\n  audioResult = JSON.parse(audioOut.stdout);\n} catch { audioResult = { error: 'parse_failed' }; }\n\nreturn [{\n  json: {\n    metadata: metaResult,\n    voiceover: audioResult,\n    pipeline_status: 'awaiting_human_approval',\n    message: 'Pipeline complete. Awaiting Slack approvals.'\n  }\n}];"
+      },
+      "id": "merge-results",
+      "name": "Merge Results",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2800, 350]
+    },
+    {
+      "parameters": {
+        "command": "={{ 'cd /home/node/project && /home/node/project/.venv/bin/python3 scripts/update_rag.py' }}"
+      },
+      "id": "update-rag",
+      "name": "6. Update RAG",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [3050, 350],
+      "notes": "Process pending feedback into RAG vector store."
+    },
+    {
+      "parameters": {
+        "command": "echo '{\"success\": true, \"message\": \"Script rejected by validator. Check logs.\", \"script_id\": \"{{ $json.script_id }}\", \"score\": {{ $json.overall_score || 0 }} }'"
+      },
+      "id": "handle-rejection",
+      "name": "Handle Rejection",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [2500, 600],
+      "notes": "Script did not meet the approval threshold. Notification already sent by validate_script.py."
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "slack-approval",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "id": "webhook-slack-approval",
+      "name": "Slack Approval Callback",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [200, 900],
+      "webhookId": "slack-approval",
+      "notes": "Receives Slack button callbacks for script/audio approval or rejection."
+    },
+    {
+      "parameters": {
+        "jsCode": "// Parse Slack approval callback\nconst body = $input.first().json.body;\n\n// Extract action from button value or query params\nconst scriptId = body.script_id || '';\nconst action = body.action || '';           // 'approve' or 'reject'\nconst step = body.step || 'script';         // 'script' or 'audio'\nconst pipelineRunId = body.pipeline_run_id || '';\nconst feedbackText = body.feedback || '';\n\nreturn [{\n  json: {\n    script_id: scriptId,\n    action: action,\n    step: step,\n    pipeline_run_id: pipelineRunId,\n    feedback_text: feedbackText\n  }\n}];"
+      },
+      "id": "parse-slack-callback",
+      "name": "Parse Slack Callback",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [450, 900]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "action-check",
+              "leftValue": "={{ $json.action }}",
+              "rightValue": "approve",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "check-slack-action",
+      "name": "Action = Approve?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [700, 900]
+    },
+    {
+      "parameters": {
+        "jsCode": "const data = $input.first().json;\n\nif (data.step === 'script') {\n  // Human approved the script text → update DB status\n  return [{ json: { message: 'Script approved by human.', script_id: data.script_id, next: 'continue_pipeline' } }];\n} else if (data.step === 'audio') {\n  // Human approved the audio → mark as ready for upload\n  return [{ json: { message: 'Audio approved by human. Ready for YouTube upload.', script_id: data.script_id, next: 'ready' } }];\n}\n\nreturn [{ json: { message: 'Unknown step', data } }];"
+      },
+      "id": "handle-human-approve",
+      "name": "Handle Approve",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1000, 800]
+    },
+    {
+      "parameters": {
+        "command": "={{ 'cd /home/node/project && /home/node/project/.venv/bin/python3 scripts/update_rag.py --feedback-text \"' + ($json.feedback_text || 'Human rejected without comment') + '\" --script-id ' + $json.script_id + ' --type rejection' }}"
+      },
+      "id": "store-rejection-feedback",
+      "name": "Store Rejection in RAG",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [1000, 1050],
+      "notes": "When human rejects, store the feedback in RAG for future learning."
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "trigger-content",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-event",
+      "name": "Event Trigger Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [200, 1400],
+      "webhookId": "trigger-content",
+      "notes": "For event-based content like aaa_review or upcoming_games. POST with: {\"content_type\": \"aaa_review\", \"game_slug\": \"elden-ring\"}"
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            {
+              "name": "content_type",
+              "value": "={{ $json.body.content_type || 'aaa_review' }}"
+            },
+            {
+              "name": "game_slug",
+              "value": "={{ $json.body.game_slug || '' }}"
+            },
+            {
+              "name": "trigger_source",
+              "value": "event"
+            }
+          ],
+          "number": [
+            {
+              "name": "year",
+              "value": "={{ $json.body.year || new Date().getFullYear() }}"
+            },
+            {
+              "name": "month",
+              "value": "={{ $json.body.month || new Date().getMonth() + 1 }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "set-event-params",
+      "name": "Set Event Params",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [450, 1400]
+    }
+  ],
+  "connections": {
+    "Monthly Schedule (25th)": {
+      "main": [
+        [{ "node": "Normalize Input", "type": "main", "index": 0 }]
+      ]
+    },
+    "Manual Trigger Webhook": {
+      "main": [
+        [{ "node": "Normalize Input", "type": "main", "index": 0 }]
+      ]
+    },
+    "Normalize Input": {
+      "main": [
+        [{ "node": "1. Fetch Game Data", "type": "main", "index": 0 }]
+      ]
+    },
+    "1. Fetch Game Data": {
+      "main": [
+        [{ "node": "Parse Fetch Result", "type": "main", "index": 0 }]
+      ]
+    },
+    "Parse Fetch Result": {
+      "main": [
+        [{ "node": "2. Generate Script", "type": "main", "index": 0 }]
+      ]
+    },
+    "2. Generate Script": {
+      "main": [
+        [{ "node": "Parse Script Result", "type": "main", "index": 0 }]
+      ]
+    },
+    "Parse Script Result": {
+      "main": [
+        [{ "node": "3. Validate Script", "type": "main", "index": 0 }]
+      ]
+    },
+    "3. Validate Script": {
+      "main": [
+        [{ "node": "Parse Validation", "type": "main", "index": 0 }]
+      ]
+    },
+    "Parse Validation": {
+      "main": [
+        [{ "node": "Approved?", "type": "main", "index": 0 }]
+      ]
+    },
+    "Approved?": {
+      "main": [
+        [
+          { "node": "4. Generate Metadata", "type": "main", "index": 0 },
+          { "node": "5. Generate Voiceover", "type": "main", "index": 0 }
+        ],
+        [
+          { "node": "Handle Rejection", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "4. Generate Metadata": {
+      "main": [
+        [{ "node": "Merge Results", "type": "main", "index": 0 }]
+      ]
+    },
+    "5. Generate Voiceover": {
+      "main": [
+        [{ "node": "Merge Results", "type": "main", "index": 0 }]
+      ]
+    },
+    "Merge Results": {
+      "main": [
+        [{ "node": "6. Update RAG", "type": "main", "index": 0 }]
+      ]
+    },
+    "Slack Approval Callback": {
+      "main": [
+        [{ "node": "Parse Slack Callback", "type": "main", "index": 0 }]
+      ]
+    },
+    "Parse Slack Callback": {
+      "main": [
+        [{ "node": "Action = Approve?", "type": "main", "index": 0 }]
+      ]
+    },
+    "Action = Approve?": {
+      "main": [
+        [{ "node": "Handle Approve", "type": "main", "index": 0 }],
+        [{ "node": "Store Rejection in RAG", "type": "main", "index": 0 }]
+      ]
+    },
+    "Event Trigger Webhook": {
+      "main": [
+        [{ "node": "Set Event Params", "type": "main", "index": 0 }]
+      ]
+    },
+    "Set Event Params": {
+      "main": [
+        [{ "node": "Normalize Input", "type": "main", "index": 0 }]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "timezone": "Asia/Riyadh"
+  },
+  "staticData": null,
+  "tags": [
+    { "name": "youtube" },
+    { "name": "gaming" },
+    { "name": "arabic" }
+  ],
+  "pinData": {},
+  "versionId": "1.0.0"
+}
