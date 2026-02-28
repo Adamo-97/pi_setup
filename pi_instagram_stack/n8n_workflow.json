@@ -1,0 +1,387 @@
+{
+  "name": "Instagram Reels Gaming Pipeline",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "triggerAtHour": 9
+            }
+          ]
+        }
+      },
+      "id": "ig-schedule",
+      "name": "Daily 9AM Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [220, 300]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "instagram-manual",
+        "responseMode": "responseNode"
+      },
+      "id": "ig-webhook-manual",
+      "name": "Manual Trigger Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [220, 520],
+      "webhookId": "instagram-manual"
+    },
+    {
+      "parameters": {
+        "httpMethod": "GET",
+        "path": "instagram-approve",
+        "responseMode": "responseNode"
+      },
+      "id": "ig-webhook-approve",
+      "name": "Approve Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [220, 1600],
+      "webhookId": "instagram-approve"
+    },
+    {
+      "parameters": {
+        "httpMethod": "GET",
+        "path": "instagram-reject",
+        "responseMode": "responseNode"
+      },
+      "id": "ig-webhook-reject",
+      "name": "Reject Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [220, 1820],
+      "webhookId": "instagram-reject"
+    },
+    {
+      "parameters": {
+        "command": "cd /home/node/project && python -m pipeline.step1_scrape_news --source all"
+      },
+      "id": "ig-step1",
+      "name": "Step 1: Scrape News",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [500, 400]
+    },
+    {
+      "parameters": {
+        "command": "cd /home/node/project && python -m pipeline.step2_generate_script --type {{ $json.content_type || 'trending_news' }} --duration {{ $json.duration || 45 }}"
+      },
+      "id": "ig-step2",
+      "name": "Step 2: Generate Script",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [740, 400]
+    },
+    {
+      "parameters": {
+        "jsCode": "const stdout = $input.first().json.stdout || '';\nconst lines = stdout.trim().split('\\n');\nconst lastLine = lines[lines.length - 1];\ntry {\n  const data = JSON.parse(lastLine);\n  return [{ json: data }];\n} catch (e) {\n  throw new Error('Failed to parse script output: ' + lastLine);\n}"
+      },
+      "id": "ig-parse-script",
+      "name": "Parse Script Output",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [960, 400]
+    },
+    {
+      "parameters": {
+        "command": "cd /home/node/project && python -m pipeline.step3_validate_script --script-id {{ $json.script_id }}"
+      },
+      "id": "ig-step3",
+      "name": "Step 3: Validate Script",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [1200, 400]
+    },
+    {
+      "parameters": {
+        "jsCode": "const stdout = $input.first().json.stdout || '';\nconst lines = stdout.trim().split('\\n');\nconst lastLine = lines[lines.length - 1];\ntry {\n  const data = JSON.parse(lastLine);\n  return [{ json: { ...data, script_id: $('Parse Script Output').first().json.script_id } }];\n} catch (e) {\n  throw new Error('Failed to parse validation output: ' + lastLine);\n}"
+      },
+      "id": "ig-parse-validation",
+      "name": "Parse Validation",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1420, 400]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ $json.approved }}",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "id": "ig-check-approved",
+      "name": "Approved?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1640, 400]
+    },
+    {
+      "parameters": {
+        "command": "cd /home/node/project && python -m pipeline.step4_generate_voiceover --script-id {{ $json.script_id }}"
+      },
+      "id": "ig-step4",
+      "name": "Step 4: Generate Voiceover",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [1900, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const stdout = $input.first().json.stdout || '';\nconst lines = stdout.trim().split('\\n');\nconst lastLine = lines[lines.length - 1];\ntry {\n  const data = JSON.parse(lastLine);\n  return [{ json: data }];\n} catch (e) {\n  throw new Error('Failed to parse voiceover output: ' + lastLine);\n}"
+      },
+      "id": "ig-parse-vo",
+      "name": "Parse Voiceover",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2120, 300]
+    },
+    {
+      "parameters": {
+        "command": "cd /home/node/project && python -m pipeline.step5_download_footage --script-id {{ $json.script_id }}"
+      },
+      "id": "ig-step5",
+      "name": "Step 5: Download Footage",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [2340, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const stdout = $input.first().json.stdout || '';\nconst lines = stdout.trim().split('\\n');\nconst lastLine = lines[lines.length - 1];\ntry {\n  const footage = JSON.parse(lastLine);\n  const voiceover = $('Parse Voiceover').first().json;\n  return [{ json: {\n    script_id: voiceover.script_id,\n    voiceover_id: voiceover.voiceover_id,\n    footage_id: footage.footage_id\n  }}];\n} catch (e) {\n  throw new Error('Failed to parse footage output: ' + lastLine);\n}"
+      },
+      "id": "ig-parse-footage",
+      "name": "Parse Footage",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2560, 300]
+    },
+    {
+      "parameters": {
+        "command": "cd /home/node/project && python -m pipeline.step6_assemble_video --script-id {{ $json.script_id }} --voiceover-id {{ $json.voiceover_id }} --footage-id {{ $json.footage_id }}"
+      },
+      "id": "ig-step6",
+      "name": "Step 6: Assemble Video",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [2780, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const stdout = $input.first().json.stdout || '';\nconst lines = stdout.trim().split('\\n');\nconst lastLine = lines[lines.length - 1];\ntry {\n  const data = JSON.parse(lastLine);\n  return [{ json: data }];\n} catch (e) {\n  throw new Error('Failed to parse video output: ' + lastLine);\n}"
+      },
+      "id": "ig-parse-video",
+      "name": "Parse Video",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [3000, 300]
+    },
+    {
+      "parameters": {
+        "command": "cd /home/node/project && python -m pipeline.step7_publish_reels --video-id {{ $json.video_id }} --mode notify"
+      },
+      "id": "ig-step7-notify",
+      "name": "Step 7: Slack Notify",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [3220, 300]
+    },
+    {
+      "parameters": {
+        "command": "cd /home/node/project && python -m pipeline.step7_publish_reels --video-id {{ $query.video_id }} --mode publish"
+      },
+      "id": "ig-step7-publish",
+      "name": "Step 7: Publish to Buffer",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [500, 1600]
+    },
+    {
+      "parameters": {
+        "command": "cd /home/node/project && python -m pipeline.step8_update_rag --video-id {{ $query.video_id || $json.video_id }}"
+      },
+      "id": "ig-step8",
+      "name": "Step 8: Update RAG",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [780, 1600]
+    },
+    {
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "✅ Instagram Reel approved and publishing!"
+      },
+      "id": "ig-respond-approve",
+      "name": "Respond Approved",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1060, 1600]
+    },
+    {
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "❌ Instagram Reel rejected."
+      },
+      "id": "ig-respond-reject",
+      "name": "Respond Rejected",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [500, 1820]
+    },
+    {
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "📸 Instagram Reels pipeline started!"
+      },
+      "id": "ig-respond-manual",
+      "name": "Respond Manual",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [3440, 520]
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            { "name": "content_type", "value": "trending_news" },
+            { "name": "duration", "value": "45" }
+          ]
+        }
+      },
+      "id": "ig-set-defaults",
+      "name": "Set Defaults",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [500, 300]
+    },
+    {
+      "parameters": {
+        "message": "=❌ Script rejected (score: {{ $json.overall_score }}). Issues: {{ $json.critical_issues }}",
+        "additionalFields": {}
+      },
+      "id": "ig-rejection-log",
+      "name": "Log Rejection",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [1900, 520]
+    }
+  ],
+  "connections": {
+    "Daily 9AM Trigger": {
+      "main": [
+        [{ "node": "Set Defaults", "type": "main", "index": 0 }]
+      ]
+    },
+    "Manual Trigger Webhook": {
+      "main": [
+        [
+          { "node": "Step 1: Scrape News", "type": "main", "index": 0 },
+          { "node": "Respond Manual", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Set Defaults": {
+      "main": [
+        [{ "node": "Step 1: Scrape News", "type": "main", "index": 0 }]
+      ]
+    },
+    "Step 1: Scrape News": {
+      "main": [
+        [{ "node": "Step 2: Generate Script", "type": "main", "index": 0 }]
+      ]
+    },
+    "Step 2: Generate Script": {
+      "main": [
+        [{ "node": "Parse Script Output", "type": "main", "index": 0 }]
+      ]
+    },
+    "Parse Script Output": {
+      "main": [
+        [{ "node": "Step 3: Validate Script", "type": "main", "index": 0 }]
+      ]
+    },
+    "Step 3: Validate Script": {
+      "main": [
+        [{ "node": "Parse Validation", "type": "main", "index": 0 }]
+      ]
+    },
+    "Parse Validation": {
+      "main": [
+        [{ "node": "Approved?", "type": "main", "index": 0 }]
+      ]
+    },
+    "Approved?": {
+      "main": [
+        [{ "node": "Step 4: Generate Voiceover", "type": "main", "index": 0 }],
+        [{ "node": "Log Rejection", "type": "main", "index": 0 }]
+      ]
+    },
+    "Step 4: Generate Voiceover": {
+      "main": [
+        [{ "node": "Parse Voiceover", "type": "main", "index": 0 }]
+      ]
+    },
+    "Parse Voiceover": {
+      "main": [
+        [{ "node": "Step 5: Download Footage", "type": "main", "index": 0 }]
+      ]
+    },
+    "Step 5: Download Footage": {
+      "main": [
+        [{ "node": "Parse Footage", "type": "main", "index": 0 }]
+      ]
+    },
+    "Parse Footage": {
+      "main": [
+        [{ "node": "Step 6: Assemble Video", "type": "main", "index": 0 }]
+      ]
+    },
+    "Step 6: Assemble Video": {
+      "main": [
+        [{ "node": "Parse Video", "type": "main", "index": 0 }]
+      ]
+    },
+    "Parse Video": {
+      "main": [
+        [{ "node": "Step 7: Slack Notify", "type": "main", "index": 0 }]
+      ]
+    },
+    "Approve Webhook": {
+      "main": [
+        [{ "node": "Step 7: Publish to Buffer", "type": "main", "index": 0 }]
+      ]
+    },
+    "Step 7: Publish to Buffer": {
+      "main": [
+        [{ "node": "Step 8: Update RAG", "type": "main", "index": 0 }]
+      ]
+    },
+    "Step 8: Update RAG": {
+      "main": [
+        [{ "node": "Respond Approved", "type": "main", "index": 0 }]
+      ]
+    },
+    "Reject Webhook": {
+      "main": [
+        [{ "node": "Respond Rejected", "type": "main", "index": 0 }]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "tags": [
+    { "name": "instagram" },
+    { "name": "gaming" },
+    { "name": "automation" }
+  ]
+}
