@@ -1,0 +1,60 @@
+version: "3.8"
+
+services:
+  postgres_tiktok:
+    image: pgvector/pgvector:pg16
+    container_name: postgres_tiktok
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-tt_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-tt_secure_pass_2025}
+      POSTGRES_DB: ${POSTGRES_DB:-tiktok_rag}
+    ports:
+      - "5434:5432"
+    volumes:
+      - pgdata_tiktok:/var/lib/postgresql/data
+      - ./database/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U tt_user -d tiktok_rag"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+    networks:
+      - tiktok_stack_net
+
+  n8n_tiktok:
+    image: n8nio/n8n:latest
+    container_name: n8n_tiktok
+    restart: unless-stopped
+    environment:
+      - N8N_PORT=5679
+      - WEBHOOK_URL=http://localhost:5679/
+      - GENERIC_TIMEZONE=Asia/Riyadh
+      - TZ=Asia/Riyadh
+    ports:
+      - "5679:5679"
+    volumes:
+      - n8n_tiktok_data:/home/node/.n8n
+      - .:/home/node/project:ro
+      - ./output:/home/node/project/output:rw
+    depends_on:
+      postgres_tiktok:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+    networks:
+      - tiktok_stack_net
+
+volumes:
+  pgdata_tiktok:
+  n8n_tiktok_data:
+
+networks:
+  tiktok_stack_net:
+    driver: bridge
