@@ -1,0 +1,93 @@
+# =============================================================
+# pi_hole_stack — Docker Compose
+# =============================================================
+# Pi-hole (DNS sinkhole) + Unbound (recursive resolver)
+# Raspberry Pi 5 / ARM64
+#
+# Ports:
+#   53   → DNS (TCP + UDP)
+#   8080 → Pi-hole web dashboard
+# =============================================================
+
+services:
+  # ---------------------------------------------------------
+  # Unbound — Recursive DNS Resolver (no upstream dependency)
+  # ---------------------------------------------------------
+  unbound:
+    image: mvance/unbound:latest
+    container_name: unbound
+    restart: unless-stopped
+    volumes:
+      - ./unbound/unbound.conf:/opt/unbound/etc/unbound/unbound.conf:ro
+    networks:
+      pihole_net:
+        ipv4_address: 10.0.53.2
+    healthcheck:
+      test: ["CMD", "drill", "@127.0.0.1", "cloudflare.com"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+    deploy:
+      resources:
+        limits:
+          memory: 128M
+
+  # ---------------------------------------------------------
+  # Pi-hole — DNS Sinkhole & Ad Blocker
+  # ---------------------------------------------------------
+  pihole:
+    image: pihole/pihole:latest
+    container_name: pihole
+    restart: unless-stopped
+    depends_on:
+      unbound:
+        condition: service_healthy
+    ports:
+      - "53:53/tcp"
+      - "53:53/udp"
+      - "${PIHOLE_WEB_PORT:-8080}:80/tcp"
+    environment:
+      TZ: ${TZ:-Asia/Riyadh}
+      WEBPASSWORD: ${PIHOLE_PASSWORD:-changeme}
+      FTLCONF_LOCAL_IPV4: ${HOST_IP:-192.168.1.100}
+      # Point Pi-hole to Unbound (internal network)
+      PIHOLE_DNS_: "10.0.53.2#5335"
+      DNSSEC: "true"
+      DNSMASQ_LISTENING: local
+      # Query logging
+      PIHOLE_LOGGING: "true"
+      QUERY_LOGGING: "true"
+    volumes:
+      - pihole_config:/etc/pihole
+      - pihole_dnsmasq:/etc/dnsmasq.d
+      - ./pihole/custom.list:/etc/pihole/custom.list:ro
+    networks:
+      pihole_net:
+        ipv4_address: 10.0.53.3
+    cap_add:
+      - NET_ADMIN
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+
+# ---------------------------------------------------------
+# Volumes — Persistent data across reboots
+# ---------------------------------------------------------
+volumes:
+  pihole_config:
+    driver: local
+  pihole_dnsmasq:
+    driver: local
+
+# ---------------------------------------------------------
+# Network — Isolated bridge with fixed subnet for DNS
+# ---------------------------------------------------------
+networks:
+  pihole_net:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 10.0.53.0/24
+          gateway: 10.0.53.1

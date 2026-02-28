@@ -1,0 +1,13 @@
+# Volumes
+pihole_config/
+pihole_dnsmasq/
+
+# Environment
+.env
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log

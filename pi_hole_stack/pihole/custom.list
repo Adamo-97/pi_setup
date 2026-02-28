@@ -1,0 +1,11 @@
+# =============================================================
+# Pi-hole Custom Local DNS Records
+# =============================================================
+# Format: <IP_ADDRESS> <DOMAIN>
+# One entry per line. These override public DNS for your LAN.
+#
+# Examples:
+# 192.168.1.100 pihole.local
+# 192.168.1.100 pi.home
+# 192.168.1.50  nas.home
+# =============================================================
