@@ -1,0 +1,34 @@
+# pi_x_stack — Git Ignore
+
+# Docker volumes
+pgdata_x/
+n8n_x_data/
+
+# Python
+venv/
+__pycache__/
+*.pyc
+*.pyo
+.eggs/
+*.egg-info/
+
+# Environment
+.env
+
+# Output
+output/
+footage/*.mp4
+footage/*.webm
+footage/*.mkv
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+
+# Logs
+logs/
+*.log
