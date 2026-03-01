@@ -1,0 +1,87 @@
+# ============================================================================
+# Cloudflared — Tunnel Configuration
+# ============================================================================
+# Maps public subdomains to internal Docker services via Cloudflare Tunnels.
+# All traffic flows through encrypted outbound connections — zero inbound ports.
+#
+# IMPORTANT: After changing this file, restart cloudflared:
+#   docker compose restart cloudflared
+#
+# Each hostname below must have a CNAME record in Cloudflare DNS:
+#   CNAME  cloud  →  <tunnel-id>.cfargotunnel.com
+#   CNAME  dash   →  <tunnel-id>.cfargotunnel.com
+#   etc.
+#
+# If you created the tunnel via the Cloudflare dashboard, the CNAME records
+# are created automatically when you add public hostnames.
+# ============================================================================
+
+# Tunnel identity — uses token from environment variable
+tunnel: pi5-tunnel
+credentials-file: /etc/cloudflared/creds/credentials.json
+
+# Protocol settings
+protocol: quic
+
+# Metrics endpoint (internal only)
+metrics: 0.0.0.0:2000
+
+# ============================================================================
+# Ingress Rules — route subdomains to internal services
+# ============================================================================
+# host.docker.internal resolves to the Pi's host IP, allowing cloudflared
+# to reach services running in other Docker Compose stacks.
+# ============================================================================
+ingress:
+
+  # ── Nextcloud (Personal Cloud) ──────────────────────────────────────────
+  - hostname: cloud.example.com
+    service: http://host.docker.internal:8443
+    originRequest:
+      noTLSVerify: true
+      connectTimeout: 30s
+
+  # ── Homepage (Dashboard) ─────────────────────────────────────────────────
+  - hostname: dash.example.com
+    service: http://host.docker.internal:3010
+    originRequest:
+      connectTimeout: 10s
+
+  # ── Uptime Kuma (Monitoring) ─────────────────────────────────────────────
+  - hostname: status.example.com
+    service: http://host.docker.internal:3001
+    originRequest:
+      connectTimeout: 10s
+
+  # ── Pi-hole (DNS Dashboard) ─────────────────────────────────────────────
+  - hostname: pihole.example.com
+    service: http://host.docker.internal:8080
+    originRequest:
+      connectTimeout: 10s
+
+  # ── n8n YouTube Pipeline ─────────────────────────────────────────────────
+  - hostname: yt.example.com
+    service: http://host.docker.internal:5678
+    originRequest:
+      connectTimeout: 10s
+
+  # ── n8n TikTok Pipeline ─────────────────────────────────────────────────
+  - hostname: tt.example.com
+    service: http://host.docker.internal:5679
+    originRequest:
+      connectTimeout: 10s
+
+  # ── n8n Instagram Pipeline ──────────────────────────────────────────────
+  - hostname: ig.example.com
+    service: http://host.docker.internal:5680
+    originRequest:
+      connectTimeout: 10s
+
+  # ── n8n X/Twitter Pipeline ──────────────────────────────────────────────
+  - hostname: x.example.com
+    service: http://host.docker.internal:5681
+    originRequest:
+      connectTimeout: 10s
+
+  # ── Catch-all (required — must be last) ─────────────────────────────────
+  - service: http_status:404

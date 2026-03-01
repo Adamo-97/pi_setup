@@ -1,0 +1,25 @@
+# Environment
+.env
+
+# Tailscale state (contains node keys)
+tailscale_state/
+
+# Cloudflare credentials
+cloudflared_data/
+*.pem
+*.cert
+*.json
+
+# Logs
+*.log
+logs/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/
+*.swp
+*.swo
+*~
