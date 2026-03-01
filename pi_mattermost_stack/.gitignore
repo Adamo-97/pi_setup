@@ -1,0 +1,25 @@
+# Environment
+.env
+
+# NVMe data (never commit)
+data/
+db/
+
+# Mattermost runtime
+config/
+logs/
+plugins/
+client-plugins/
+
+# Logs
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/
+*.swp
+*.swo
+*~

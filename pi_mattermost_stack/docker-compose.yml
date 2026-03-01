@@ -1,0 +1,143 @@
+# ============================================================================
+# Pi Mattermost Stack — Docker Compose
+# ============================================================================
+# Human-in-the-loop approval dashboard for the 4 gaming news pipelines:
+#   - Mattermost Team Edition  → messaging, channels, bot integrations
+#   - PostgreSQL 16            → persistent database
+#
+# Channels: #pipeline-youtube, #pipeline-tiktok, #pipeline-instagram, #pipeline-x
+# Each n8n pipeline posts pending content → admin reviews → approves/rejects.
+#
+# All heavy I/O (database + Mattermost data) is mapped to the NVMe SSD.
+# Exposed securely via Tailscale (no public ports, no port forwarding).
+#
+# Usage:
+#   docker compose up -d
+#   docker compose logs -f
+#   docker compose down
+# ============================================================================
+
+services:
+  # --------------------------------------------------------------------------
+  # PostgreSQL 16 — Mattermost Database
+  # --------------------------------------------------------------------------
+  postgres_mattermost:
+    image: postgres:16-alpine
+    container_name: postgres_mattermost
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-mattermost}
+      POSTGRES_USER: ${POSTGRES_USER:-mm_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+      TZ: ${TZ:-Asia/Riyadh}
+    ports:
+      - "${POSTGRES_PORT:-5438}:5432"
+    volumes:
+      # Database on NVMe for fast I/O
+      - ${NVME_MOUNT:-/mnt/nvme}/mattermost/db:/var/lib/postgresql/data
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U ${POSTGRES_USER:-mm_user} -d ${POSTGRES_DB:-mattermost}",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    networks:
+      - mattermost_net
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+
+  # --------------------------------------------------------------------------
+  # Mattermost Team Edition — Approval Dashboard
+  # --------------------------------------------------------------------------
+  # Human-in-the-loop hub: n8n pipelines post pending content to dedicated
+  # channels. Admin reviews on web/mobile, approves or rejects via reactions
+  # or slash commands. Mobile push notifications via free TPNS.
+  # --------------------------------------------------------------------------
+  mattermost:
+    image: mattermost/mattermost-team-edition:latest
+    container_name: mattermost
+    restart: unless-stopped
+    environment:
+      # ── Timezone ──
+      TZ: ${TZ:-Asia/Riyadh}
+
+      # ── Database Connection ──
+      MM_SQLSETTINGS_DRIVERNAME: postgres
+      MM_SQLSETTINGS_DATASOURCE: >-
+        postgres://${POSTGRES_USER:-mm_user}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}@postgres_mattermost:5432/${POSTGRES_DB:-mattermost}?sslmode=disable&connect_timeout=10
+
+      # ── Site URL (Tailscale access) ──
+      MM_SERVICESETTINGS_SITEURL: ${MM_SITEURL:-http://192.168.1.100:8065}
+      MM_SERVICESETTINGS_LISTENADDRESS: ":8065"
+
+      # ── Mobile Push Notifications (Free TPNS) ──
+      MM_EMAILSETTINGS_SENDPUSHNOTIFICATIONS: "true"
+      MM_EMAILSETTINGS_PUSHNOTIFICATIONSERVER: "https://push-test.mattermost.com"
+      MM_EMAILSETTINGS_PUSHNOTIFICATIONCONTENTS: "id_loaded"
+
+      # ── Bot & Integration Settings ──
+      MM_SERVICESETTINGS_ENABLEBOTACCOUNTCREATION: "true"
+      MM_SERVICESETTINGS_ENABLEUSERACCESSTOKENS: "true"
+      MM_SERVICESETTINGS_ENABLEINCOMINGWEBHOOKS: "true"
+      MM_SERVICESETTINGS_ENABLEOUTGOINGWEBHOOKS: "true"
+      MM_SERVICESETTINGS_ENABLEPOSTUSERNAMEOVERRIDE: "true"
+      MM_SERVICESETTINGS_ENABLEPOSTICONOVERRIDE: "true"
+      MM_SERVICESETTINGS_ENABLECUSTOMEMOJI: "true"
+
+      # ── File Storage (local, on NVMe) ──
+      MM_FILESETTINGS_DRIVERNAME: local
+      MM_FILESETTINGS_DIRECTORY: /mattermost/data
+      MM_FILESETTINGS_MAXFILESIZE: "104857600"
+
+      # ── Logging ──
+      MM_LOGSETTINGS_ENABLECONSOLE: "true"
+      MM_LOGSETTINGS_CONSOLELEVEL: "INFO"
+      MM_LOGSETTINGS_ENABLEFILE: "true"
+      MM_LOGSETTINGS_FILELEVEL: "INFO"
+      MM_LOGSETTINGS_FILELOCATION: /mattermost/logs
+
+      # ── Performance (Pi 5 tuning) ──
+      MM_SQLSETTINGS_MAXIDLECONNS: "5"
+      MM_SQLSETTINGS_MAXOPENCONNS: "10"
+      MM_SERVICESETTINGS_GOROUTINEHEALTHTHRESHOLD: "-1"
+    ports:
+      - "${MATTERMOST_PORT:-8065}:8065"
+    volumes:
+      # Mattermost data, config, logs, plugins on NVMe
+      - ${NVME_MOUNT:-/mnt/nvme}/mattermost/data:/mattermost/data
+      - ${NVME_MOUNT:-/mnt/nvme}/mattermost/config:/mattermost/config
+      - ${NVME_MOUNT:-/mnt/nvme}/mattermost/logs:/mattermost/logs
+      - ${NVME_MOUNT:-/mnt/nvme}/mattermost/plugins:/mattermost/plugins
+      - ${NVME_MOUNT:-/mnt/nvme}/mattermost/client-plugins:/mattermost/client/plugins
+    depends_on:
+      postgres_mattermost:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "curl -sf http://localhost:8065/api/v4/system/ping || exit 1",
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+    networks:
+      - mattermost_net
+    deploy:
+      resources:
+        limits:
+          memory: 1024M
+
+# ----------------------------------------------------------------------------
+# Network — isolated bridge for the Mattermost stack
+# ----------------------------------------------------------------------------
+networks:
+  mattermost_net:
+    driver: bridge
