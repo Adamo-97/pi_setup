@@ -4,14 +4,14 @@
 Generate Voiceover
 ====================
 Generates Arabic voiceover using ElevenLabs TTS with cloned voice.
-Called by n8n AFTER the human approves the script via Slack (Step 1).
+Called by n8n AFTER the human approves the script via Mattermost (Step 1).
 
 This script:
   1. Reads the approved script from the database
   2. Sends text to ElevenLabs API
   3. Saves the .wav file to output/voiceovers/
   4. Records the voiceover in the database
-  5. Sends Slack notification for audio approval (Step 2)
+  5. Sends Mattermost notification with audio file for approval (Step 2)
 
 Usage (n8n Execute Command):
     python3 scripts/generate_voiceover.py --script-id <uuid>
@@ -23,7 +23,7 @@ Output (stdout JSON):
         "script_id": "uuid",
         "file_path": "/path/to/voiceover.wav",
         "duration_seconds": 600.5,
-        "slack_sent": true
+        "mattermost_sent": true
     }
 """
 
@@ -40,7 +40,7 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
 from services.elevenlabs_service import ElevenLabsService
-from services.slack_service import SlackService
+from services.mattermost_service import MattermostService
 from database.connection import execute_query
 from config.settings import settings
 
@@ -101,7 +101,7 @@ def main():
         "--from-stdin", action="store_true", help="Read JSON from stdin."
     )
     parser.add_argument(
-        "--skip-slack", action="store_true", help="Skip Slack notification."
+        "--skip-notify", action="store_true", help="Skip Mattermost notification."
     )
 
     args = parser.parse_args()
@@ -227,13 +227,13 @@ def main():
         )
 
         # ------------------------------------------------------------------
-        # Send to Slack for audio approval (Step 2)
+        # Send to Mattermost for audio approval (Step 2)
         # ------------------------------------------------------------------
-        slack_sent = False
-        if not args.skip_slack:
+        mattermost_sent = False
+        if not args.skip_notify:
             try:
-                slack = SlackService()
-                slack_sent = slack.send_audio_for_approval(
+                mm = MattermostService()
+                mattermost_sent = mm.send_audio_for_approval(
                     script_id=script_id,
                     title=title,
                     audio_duration=tts_result["duration_seconds"],
@@ -241,7 +241,7 @@ def main():
                     pipeline_run_id=pipeline_run_id,
                 )
             except Exception as exc:
-                logger.error("Failed to send Slack audio notification: %s", exc)
+                logger.error("Failed to send Mattermost audio notification: %s", exc)
 
         # ------------------------------------------------------------------
         # Output
@@ -255,7 +255,7 @@ def main():
             "file_size_bytes": tts_result["file_size_bytes"],
             "duration_seconds": tts_result["duration_seconds"],
             "duration_minutes": round(tts_result["duration_seconds"] / 60, 1),
-            "slack_sent": slack_sent,
+            "mattermost_sent": mattermost_sent,
             "pipeline_run_id": pipeline_run_id,
         }
 

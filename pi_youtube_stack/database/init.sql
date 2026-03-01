@@ -147,7 +147,7 @@ CREATE TABLE IF NOT EXISTS feedback_log (
     script_id       UUID REFERENCES generated_scripts(id),
     feedback_type   TEXT NOT NULL,               -- "approval" | "rejection" | "edit" | "note"
     feedback_text   TEXT,                        -- Human feedback content
-    source          TEXT DEFAULT 'slack',        -- Where feedback came from
+    source          TEXT DEFAULT 'mattermost',        -- Where feedback came from
     applied         BOOLEAN DEFAULT FALSE,       -- Has this been processed by RAG?
     created_at      TIMESTAMPTZ DEFAULT NOW()
 );

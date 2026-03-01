@@ -148,7 +148,7 @@ CREATE TABLE IF NOT EXISTS feedback_log (
     video_id        UUID         REFERENCES rendered_videos(id),
     feedback_type   VARCHAR(30)  NOT NULL,               -- approval | rejection | edit | note
     feedback_text   TEXT,
-    source          VARCHAR(30)  DEFAULT 'slack',        -- slack | manual
+    source          VARCHAR(30)  DEFAULT 'mattermost',        -- mattermost | manual
     applied         BOOLEAN      DEFAULT FALSE,
     created_at      TIMESTAMPTZ  DEFAULT NOW()
 );

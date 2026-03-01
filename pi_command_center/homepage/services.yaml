@@ -69,7 +69,7 @@
     - Uptime Kuma:
         icon: uptime-kuma.svg
         href: http://{{HOMEPAGE_VAR_HOST_IP}}:3001
-        description: Health monitoring & Slack alerts
+        description: Health monitoring & Mattermost alerts
         server: pi-docker
         container: uptime_kuma
         widget:

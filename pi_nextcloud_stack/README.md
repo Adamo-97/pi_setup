@@ -22,7 +22,7 @@ C4Context
     System_Ext(instagram, "pi_instagram_stack", "n8n pipeline → writes .mp4/.mp3 to NVMe")
     System_Ext(x_stack, "pi_x_stack", "n8n pipeline → writes .mp4/.mp3 to NVMe")
     System_Ext(desktop, "Desktop Client", "Nextcloud sync client on Windows/Mac")
-    System_Ext(slack, "Slack", "Weekend batch approval notifications")
+    System_Ext(mattermost, "Mattermost", "Weekend batch approval notifications")
 
     Rel(youtube, nextcloud_stack, "Writes files to /ai-content/youtube/")
     Rel(tiktok, nextcloud_stack, "Writes files to /ai-content/tiktok/")
@@ -32,9 +32,9 @@ C4Context
     Rel(admin, desktop, "Reviews & approves content")
     Rel(admin, nextcloud_stack, "Web UI (HTTPS :443 / HTTP :8443)")
     Rel(mobile, nextcloud_stack, "Mobile app (HTTPS)")
-    Rel(nextcloud_stack, slack, "Weekend approval webhooks (Sat/Sun)")
+    Rel(nextcloud_stack, mattermost, "Weekend approval notifications (Sat/Sun)")
 
-    UpdateRelStyle(nextcloud_stack, slack, $lineColor="orange", $textColor="orange")
+    UpdateRelStyle(nextcloud_stack, mattermost, $lineColor="orange", $textColor="orange")
 ```
 
 ### C4 Container Diagram
@@ -103,7 +103,7 @@ flowchart LR
     X --> dirs
     dirs --> NC
     NC --> SF
-    SF --> Slack["Slack\n(Sat/Sun)\nApproval Webhooks"]
+    SF --> MM["Mattermost\n(Sat/Sun)\nApproval Notifications"]
 ```
 
 ## Prerequisites
@@ -210,7 +210,9 @@ NVMe SSD Layout (/mnt/nvme):
 | `CADDY_HTTP_PORT`          | `80`                | Caddy HTTP (redirects to HTTPS)             |
 | `CADDY_HTTPS_PORT`         | `443`               | Caddy HTTPS                                 |
 | `HOST_IP`                  | `192.168.1.100`     | Raspberry Pi static IP                      |
-| `SLACK_WEBHOOK_URL`        | —                   | Slack webhook for notifications             |
+| `MATTERMOST_URL`           | —                   | Mattermost server URL                       |
+| `MATTERMOST_BOT_TOKEN`     | —                   | Bot Personal Access Token for notifications |
+| `MATTERMOST_CHANNEL_ID`    | —                   | Target channel ID for notifications         |
 
 ### PHP Performance Tuning
 
@@ -263,7 +265,7 @@ To access Nextcloud from outside your LAN:
 
 3. **Background sync:** Nextcloud desktop client on your PC picks up new files automatically
 
-4. **Weekend (Sat/Sun):** Slack approval webhooks fire — you review synced files on your PC and plan the publishing schedule
+4. **Weekend (Sat/Sun):** Mattermost approval notifications fire — you review synced files on your PC and plan the publishing schedule
 
 ### Configuring n8n Output Paths
 

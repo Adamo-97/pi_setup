@@ -130,7 +130,7 @@ class Feedback(BaseModel):
     video_id: Optional[UUID] = None
     feedback_type: str
     feedback_text: Optional[str] = None
-    source: str = "slack"
+    source: str = "mattermost"
     applied: bool = False
 
     class Config:

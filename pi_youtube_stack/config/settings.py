@@ -106,12 +106,12 @@ class DatabaseConfig:
 
 
 @dataclass(frozen=True)
-class SlackConfig:
-    """Slack webhook configuration for human-in-the-loop approval."""
+class MattermostConfig:
+    """Mattermost REST API configuration for human-in-the-loop approval."""
 
-    webhook_url: str
-    approval_channel: str
+    url: str
     bot_token: str
+    channel_id: str
 
 
 @dataclass(frozen=True)
@@ -192,11 +192,11 @@ def _build_database() -> DatabaseConfig:
     )
 
 
-def _build_slack() -> SlackConfig:
-    return SlackConfig(
-        webhook_url=_require_env("SLACK_WEBHOOK_URL"),
-        approval_channel=os.getenv("SLACK_APPROVAL_CHANNEL", "#youtube-approvals"),
-        bot_token=os.getenv("SLACK_BOT_TOKEN", ""),
+def _build_mattermost() -> MattermostConfig:
+    return MattermostConfig(
+        url=_require_env("MATTERMOST_URL"),
+        bot_token=_require_env("MATTERMOST_BOT_TOKEN"),
+        channel_id=_require_env("MATTERMOST_CHANNEL_ID"),
     )
 
 
@@ -294,7 +294,7 @@ class _Settings:
         self._elevenlabs = None
         self._rawg = None
         self._database = None
-        self._slack = None
+        self._mattermost = None
         self._n8n = None
         self._paths = None
 
@@ -323,10 +323,10 @@ class _Settings:
         return self._database
 
     @property
-    def slack(self) -> SlackConfig:
-        if self._slack is None:
-            self._slack = _build_slack()
-        return self._slack
+    def mattermost(self) -> MattermostConfig:
+        if self._mattermost is None:
+            self._mattermost = _build_mattermost()
+        return self._mattermost
 
     @property
     def n8n(self) -> N8NConfig:

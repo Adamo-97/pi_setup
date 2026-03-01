@@ -53,9 +53,10 @@ class DatabaseConfig:
 
 
 @dataclass(frozen=True)
-class SlackConfig:
-    webhook_url: str = ""
-    channel: str = "#instagram-pipeline"
+class MattermostConfig:
+    url: str = ""
+    bot_token: str = ""
+    channel_id: str = ""
 
 
 @dataclass(frozen=True)
@@ -214,8 +215,10 @@ class _Settings:
             user=e("DB_USER", "ig_user"),
             password=e("DB_PASSWORD", "ig_secure_pass_2025"),
         )
-        self.slack = SlackConfig(
-            webhook_url=e("SLACK_WEBHOOK_URL", ""),
+        self.mattermost = MattermostConfig(
+            url=e("MATTERMOST_URL", ""),
+            bot_token=e("MATTERMOST_BOT_TOKEN", ""),
+            channel_id=e("MATTERMOST_CHANNEL_ID", ""),
         )
         self.buffer = BufferConfig(
             access_token=e("BUFFER_ACCESS_TOKEN", ""),

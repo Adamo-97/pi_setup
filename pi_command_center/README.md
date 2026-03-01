@@ -1,6 +1,6 @@
 # pi_command_center
 
-Unified monitoring dashboard and health alerting for all Raspberry Pi 5 microservices. Deploys **Homepage** (visual service grid) and **Uptime Kuma** (uptime monitoring + Slack alerts) via Docker Compose.
+Unified monitoring dashboard and health alerting for all Raspberry Pi 5 microservices. Deploys **Homepage** (visual service grid) and **Uptime Kuma** (uptime monitoring + Mattermost alerts) via Docker Compose.
 
 ## Architecture
 
@@ -20,7 +20,7 @@ C4Context
     System_Ext(instagram, "pi_instagram_stack", "n8n + PostgreSQL — Instagram content pipeline")
     System_Ext(x_stack, "pi_x_stack", "n8n + PostgreSQL — X/Twitter content pipeline")
     System_Ext(pihole, "pi_hole_stack", "Pi-hole + Unbound — DNS ad blocker")
-    System_Ext(slack, "Slack", "Receives emergency alerts & weekend batch reports")
+    System_Ext(mattermost, "Mattermost", "Receives emergency alerts & weekend batch reports")
 
     Rel(admin, command_center, "Views dashboard (HTTP :3010)")
     Rel(admin, command_center, "Views monitors (HTTP :3001)")
@@ -29,10 +29,10 @@ C4Context
     Rel(command_center, instagram, "Monitors health & shows status")
     Rel(command_center, x_stack, "Monitors health & shows status")
     Rel(command_center, pihole, "Monitors DNS & shows stats")
-    Rel(command_center, slack, "Emergency alerts (immediate)")
-    Rel(command_center, slack, "Weekend batch reports (Sat/Sun)")
+    Rel(command_center, mattermost, "Emergency alerts (immediate)")
+    Rel(command_center, mattermost, "Weekend batch reports (Sat/Sun)")
 
-    UpdateRelStyle(command_center, slack, $lineColor="red", $textColor="red")
+    UpdateRelStyle(command_center, mattermost, $lineColor="red", $textColor="red")
 ```
 
 ### C4 Container Diagram
@@ -45,7 +45,7 @@ C4Container
 
     System_Boundary(pi, "Raspberry Pi 5 (Docker)") {
         Container(homepage, "Homepage", "ghcr.io/gethomepage/homepage", "Visual dashboard with service grid, status widgets, system resources. Port: 3010")
-        Container(uptime_kuma, "Uptime Kuma", "louislam/uptime-kuma:1", "Health monitoring, ping checks, Slack webhooks. Port: 3001")
+        Container(uptime_kuma, "Uptime Kuma", "louislam/uptime-kuma:1", "Health monitoring, ping checks, Mattermost webhooks. Port: 3001")
         Container(docker_sock, "Docker Socket", "/var/run/docker.sock", "Read-only access to container status")
     }
 
@@ -65,7 +65,7 @@ C4Container
         Container(unbound_c, "Unbound", "mvance/unbound", "Port: 5335 internal")
     }
 
-    System_Ext(slack, "Slack", "Webhook notifications")
+    System_Ext(mattermost, "Mattermost", "Webhook notifications")
 
     Rel(admin, homepage, "HTTP :3010")
     Rel(admin, uptime_kuma, "HTTP :3001")
@@ -80,11 +80,11 @@ C4Container
     Rel(uptime_kuma, pg_ig, "TCP ping :5435")
     Rel(uptime_kuma, pg_x, "TCP ping :5436")
     Rel(uptime_kuma, pihole_c, "HTTP ping :8080")
-    Rel(uptime_kuma, slack, "🔴 Emergency webhook (immediate)")
+    Rel(uptime_kuma, mattermost, "🔴 Emergency webhook (immediate)")
     Rel(homepage, n8n_yt, "API widget")
     Rel(homepage, pihole_c, "API widget")
 
-    UpdateRelStyle(uptime_kuma, slack, $lineColor="red", $textColor="red")
+    UpdateRelStyle(uptime_kuma, mattermost, $lineColor="red", $textColor="red")
 ```
 
 ### Alerting Flow
@@ -92,10 +92,10 @@ C4Container
 ```mermaid
 flowchart LR
     subgraph immediate["Immediate Alerts — 24/7"]
-        UK["Uptime Kuma\n(24/7 ping)"] -- "Service Down?\nYES → alert NOW" --> IW["IMMEDIATE\nWebhook"] --> SA["Slack\n#alerts"]
+        UK["Uptime Kuma\n(24/7 ping)"] -- "Service Down?\nYES → alert NOW" --> IW["IMMEDIATE\nWebhook"] --> SA["Mattermost\n#alerts"]
     end
     subgraph batched["Weekend Reports — Sat/Sun 10 AM"]
-        CJ["Cron Job\n(weekend)"] -- "Status report" --> BS["BATCHED\nSummary"] --> SW["Slack\n#weekend"]
+        CJ["Cron Job\n(weekend)"] -- "Status report" --> BS["BATCHED\nSummary"] --> SW["Mattermost\n#weekend"]
     end
 ```
 
@@ -103,13 +103,13 @@ flowchart LR
 
 ## Prerequisites
 
-| Requirement     | Version           | Notes                                     |
-| --------------- | ----------------- | ----------------------------------------- |
-| Raspberry Pi 5  | ARM64             | 4 GB+ RAM recommended                     |
-| Raspberry Pi OS | Bookworm (64-bit) | Or any Debian-based ARM64 distro          |
-| Docker          | 24.0+             | `curl -fsSL https://get.docker.com \| sh` |
-| Docker Compose  | v2.20+            | `sudo apt install docker-compose-plugin`  |
-| Slack Workspace | —                 | For webhook notifications                 |
+| Requirement       | Version           | Notes                                                 |
+| ----------------- | ----------------- | ----------------------------------------------------- |
+| Raspberry Pi 5    | ARM64             | 4 GB+ RAM recommended                                 |
+| Raspberry Pi OS   | Bookworm (64-bit) | Or any Debian-based ARM64 distro                      |
+| Docker            | 24.0+             | `curl -fsSL https://get.docker.com \| sh`             |
+| Docker Compose    | v2.20+            | `sudo apt install docker-compose-plugin`              |
+| Mattermost Server | —                 | For webhook notifications (http://192.168.1.100:8065) |
 
 ## Quick Start
 
@@ -122,8 +122,8 @@ cd pi_setup/pi_command_center
 chmod +x setup.sh weekend-batch-notify.sh
 ./setup.sh
 
-# 3. Configure Slack webhooks
-nano .env    # Set SLACK_WEBHOOK_URL and SLACK_BATCH_WEBHOOK_URL
+# 3. Configure Mattermost connection
+nano .env    # Set MATTERMOST_URL, MATTERMOST_BOT_TOKEN, MATTERMOST_CHANNEL_ID, MATTERMOST_BATCH_CHANNEL_ID
 
 # 4. Open the dashboard
 # http://<pi-ip>:3010
@@ -141,7 +141,7 @@ pi_command_center/
 ├── .env.example                 # Environment variable template
 ├── .gitignore
 ├── setup.sh                     # One-time setup & install
-├── weekend-batch-notify.sh      # Weekend Slack batch reporter (cron)
+├── weekend-batch-notify.sh      # Weekend Mattermost batch reporter (cron)
 ├── homepage/
 │   ├── settings.yaml            # Theme, layout, global config
 │   ├── services.yaml            # Service grid (all stacks)
@@ -157,20 +157,22 @@ pi_command_center/
 
 ### Environment Variables (`.env`)
 
-| Variable                  | Default                     | Description                                    |
-| ------------------------- | --------------------------- | ---------------------------------------------- |
-| `TZ`                      | `Asia/Riyadh`               | Timezone for logs and cron                     |
-| `HOMEPAGE_PORT`           | `3010`                      | Host port for Homepage dashboard               |
-| `UPTIME_KUMA_PORT`        | `3001`                      | Host port for Uptime Kuma                      |
-| `HOST_IP`                 | `192.168.1.100`             | Raspberry Pi's static IP                       |
-| `SLACK_WEBHOOK_URL`       | —                           | Slack webhook for Uptime Kuma emergency alerts |
-| `SLACK_BATCH_WEBHOOK_URL` | —                           | Slack webhook for weekend batch reports        |
-| `N8N_YOUTUBE_URL`         | `http://192.168.1.100:5678` | YouTube n8n endpoint                           |
-| `N8N_TIKTOK_URL`          | `http://192.168.1.100:5679` | TikTok n8n endpoint                            |
-| `N8N_INSTAGRAM_URL`       | `http://192.168.1.100:5680` | Instagram n8n endpoint                         |
-| `N8N_X_URL`               | `http://192.168.1.100:5681` | X/Twitter n8n endpoint                         |
-| `PIHOLE_URL`              | `http://192.168.1.100:8080` | Pi-hole web UI endpoint                        |
-| `PIHOLE_API_KEY`          | —                           | Pi-hole API key for widget stats               |
+| Variable                      | Default                     | Description                                 |
+| ----------------------------- | --------------------------- | ------------------------------------------- |
+| `TZ`                          | `Asia/Riyadh`               | Timezone for logs and cron                  |
+| `HOMEPAGE_PORT`               | `3010`                      | Host port for Homepage dashboard            |
+| `UPTIME_KUMA_PORT`            | `3001`                      | Host port for Uptime Kuma                   |
+| `HOST_IP`                     | `192.168.1.100`             | Raspberry Pi's static IP                    |
+| `MATTERMOST_URL`              | `http://192.168.1.100:8065` | Mattermost server URL for emergency alerts  |
+| `MATTERMOST_BOT_TOKEN`        | —                           | Bot Personal Access Token for alerts        |
+| `MATTERMOST_CHANNEL_ID`       | —                           | Channel ID for Uptime Kuma emergency alerts |
+| `MATTERMOST_BATCH_CHANNEL_ID` | —                           | Channel ID for weekend batch reports        |
+| `N8N_YOUTUBE_URL`             | `http://192.168.1.100:5678` | YouTube n8n endpoint                        |
+| `N8N_TIKTOK_URL`              | `http://192.168.1.100:5679` | TikTok n8n endpoint                         |
+| `N8N_INSTAGRAM_URL`           | `http://192.168.1.100:5680` | Instagram n8n endpoint                      |
+| `N8N_X_URL`                   | `http://192.168.1.100:5681` | X/Twitter n8n endpoint                      |
+| `PIHOLE_URL`                  | `http://192.168.1.100:8080` | Pi-hole web UI endpoint                     |
+| `PIHOLE_API_KEY`              | —                           | Pi-hole API key for widget stats            |
 
 ### Editing Homepage Services
 
@@ -246,12 +248,12 @@ After first launch, open `http://<pi-ip>:3001` and create your admin account. Th
 | Unbound DNS   | Docker Container | `unbound`                           | 30s      | Recursive resolver  |
 | Homepage      | HTTP             | `http://192.168.1.100:3010`         | 60s      | This dashboard      |
 
-### Configuring Slack Alerts in Uptime Kuma
+### Configuring Mattermost Alerts in Uptime Kuma
 
 1. Go to **Settings → Notifications** in Uptime Kuma
 2. Click **Setup Notification**
-3. Select **Slack Incoming Webhook**
-4. Paste your `SLACK_WEBHOOK_URL`
+3. Select **Webhook** (or use Mattermost integration)
+4. Set the webhook URL to `http://192.168.1.100:8065/hooks/<incoming-webhook-id>` or configure a custom notification script
 5. Set **Notification Name**: `Emergency Alerts`
 6. Check **Default enabled** — applies to all monitors
 7. Test and save
@@ -262,8 +264,8 @@ This sends **immediate** alerts when any service goes down or recovers.
 
 | Alert Type               | When                       | Channel    | Mechanism                        |
 | ------------------------ | -------------------------- | ---------- | -------------------------------- |
-| **Service Down**         | Immediate (24/7)           | `#alerts`  | Uptime Kuma → Slack webhook      |
-| **Service Recovery**     | Immediate (24/7)           | `#alerts`  | Uptime Kuma → Slack webhook      |
+| **Service Down**         | Immediate (24/7)           | `#alerts`  | Uptime Kuma → Mattermost webhook |
+| **Service Recovery**     | Immediate (24/7)           | `#alerts`  | Uptime Kuma → Mattermost webhook |
 | **Status Report**        | Saturday & Sunday 10:00 AM | `#weekend` | Cron → `weekend-batch-notify.sh` |
 | **Publishing Approvals** | Saturday & Sunday 10:00 AM | `#weekend` | Cron → `weekend-batch-notify.sh` |
 
@@ -272,7 +274,7 @@ The weekend batch script (`weekend-batch-notify.sh`) runs via cron and:
 - Checks every n8n container's running state
 - Checks every PostgreSQL database's running state
 - Checks Pi-hole status
-- Sends a formatted Slack Block Kit message summarizing everything
+- Sends a formatted Mattermost Markdown message summarizing everything
 - **Silently exits on weekdays** — only sends on Saturday and Sunday
 
 ### Manual Batch Report

@@ -3,7 +3,7 @@
 # ============================================================================
 # Unified monitoring & dashboard stack for Raspberry Pi 5:
 #   - Homepage       → visual dashboard with service links & status widgets
-#   - Uptime Kuma    → health monitoring with Slack emergency alerts
+#   - Uptime Kuma    → health monitoring with Mattermost emergency alerts
 #
 # Usage:
 #   docker compose up -d

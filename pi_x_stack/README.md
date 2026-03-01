@@ -10,7 +10,7 @@ Fully automated X/Twitter gaming video pipeline running on a Raspberry Pi 5. Gen
 C4Context
     title System Context — pi_x_stack
 
-    Person(user, "Content Creator", "Reviews & approves videos via Slack")
+    Person(user, "Content Creator", "Reviews & approves videos via Mattermost")
 
     System(x_stack, "pi_x_stack", "Automated X/Twitter gaming video pipeline on Raspberry Pi 5")
 
@@ -18,17 +18,17 @@ C4Context
     System_Ext(elevenlabs, "ElevenLabs", "Arabic TTS with word-level timestamps")
     System_Ext(youtube, "YouTube", "Gameplay/trailer footage source")
     System_Ext(buffer, "Buffer", "X/Twitter video publishing")
-    System_Ext(slack, "Slack", "Human-in-the-loop approval notifications")
+    System_Ext(mattermost, "Mattermost", "Human-in-the-loop approval notifications")
     System_Ext(news, "News Sources", "RSS feeds, Google News, Reddit")
 
-    Rel(user, slack, "Approves/rejects videos")
+    Rel(user, mattermost, "Approves/rejects videos")
     Rel(x_stack, gemini, "Generates scripts & embeddings")
     Rel(x_stack, elevenlabs, "Generates Arabic voiceover")
     Rel(x_stack, youtube, "Downloads footage via yt-dlp")
     Rel(x_stack, buffer, "Publishes videos to X/Twitter")
-    Rel(x_stack, slack, "Sends approval requests")
+    Rel(x_stack, mattermost, "Sends approval requests")
     Rel(x_stack, news, "Scrapes gaming news")
-    Rel(slack, x_stack, "Webhook callbacks (approve/reject)")
+    Rel(mattermost, x_stack, "Webhook callbacks (approve/reject)")
 ```
 
 ### C4 Container Diagram
@@ -44,10 +44,10 @@ C4Container
         Container(postgres, "PostgreSQL 16", "Database", "pgvector, RAG store, port 5436")
         Container(pipeline, "Python Pipeline", "8 Steps", "Scrape → Write → Validate → Voice → Footage → Assemble → Publish → RAG")
         Container(agents, "AI Agents", "Python", "WriterAgent, ValidatorAgent, ClipAgent")
-        Container(services, "Services", "Python", "Gemini, ElevenLabs, News, Video, Subtitles, Buffer, Slack")
+        Container(services, "Services", "Python", "Gemini, ElevenLabs, News, Video, Subtitles, Buffer, Mattermost")
     }
 
-    Rel(user, n8n, "Manual trigger / Slack approval")
+    Rel(user, n8n, "Manual trigger / Mattermost approval")
     Rel(n8n, pipeline, "Executes pipeline steps")
     Rel(pipeline, agents, "Script generation & validation")
     Rel(pipeline, services, "External API calls")
@@ -75,7 +75,7 @@ flowchart LR
     S3 --> S4["4. Generate Voiceover\nElevenLabs Arabic TTS"]
     S4 --> S5["5. Download Footage\nyt-dlp + local fallback"]
     S5 --> S6["6. Assemble Video\nFFmpeg 1080×1920 + ASS"]
-    S6 --> S7["7. Publish to X\nSlack → Buffer → X"]
+    S6 --> S7["7. Publish to X\nMattermost → Buffer → X"]
     S7 --> S8["8. Update RAG\nEmbeddings & feedback"]
 ```
 
@@ -140,7 +140,7 @@ pi_x_stack/
 │   ├── video_downloader.py      # yt-dlp + local footage
 │   ├── subtitle_service.py      # ASS karaoke subtitles
 │   ├── video_assembler.py       # FFmpeg video assembly
-│   ├── slack_service.py         # Slack approval webhooks
+│   ├── mattermost_service.py    # Mattermost approval webhooks
 │   └── buffer_service.py        # Buffer X/Twitter publishing
 ├── agents/
 │   ├── base_agent.py            # Abstract agent base class
@@ -186,7 +186,9 @@ See [.env.example](.env.example) for all required keys:
 - `SERPAPI_KEY` — Google News scraping
 - `BUFFER_ACCESS_TOKEN` — Buffer publishing
 - `BUFFER_PROFILE_ID` — X/Twitter Buffer profile
-- `SLACK_WEBHOOK_URL` — Slack notifications
+- `MATTERMOST_URL` — Self-hosted Mattermost server URL
+- `MATTERMOST_BOT_TOKEN` — Personal Access Token for bot-x
+- `MATTERMOST_CHANNEL_ID` — Channel ID for #pipeline-x
 - `POSTGRES_*` — Database configuration
 
 ## Schedule

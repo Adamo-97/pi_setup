@@ -12,7 +12,7 @@ Fully automated TikTok gaming content pipeline for Raspberry Pi 5. Scrapes trend
 C4Context
     title TikTok Gaming Pipeline — System Context
 
-    Person(creator, "Content Creator", "Approves videos via Slack, monitors pipeline")
+    Person(creator, "Content Creator", "Approves videos via Mattermost, monitors pipeline")
 
     System(tiktok_stack, "pi_tiktok_stack", "Automated TikTok video generation pipeline on Raspberry Pi 5")
 
@@ -23,20 +23,20 @@ C4Context
     System_Ext(serpapi, "SerpApi", "Google News search API")
     System_Ext(reddit, "Reddit", "r/gaming, r/Games, r/pcgaming")
     System_Ext(buffer, "Buffer", "TikTok auto-publishing API")
-    System_Ext(slack, "Slack", "Approval notifications with action buttons")
+    System_Ext(mattermost, "Mattermost", "Approval notifications with action buttons")
     System_Ext(tiktok, "TikTok", "Target publishing platform")
 
-    Rel(creator, slack, "Reviews & approves videos")
+    Rel(creator, mattermost, "Reviews & approves videos")
     Rel(tiktok_stack, gemini, "Scripts, validation, embeddings")
     Rel(tiktok_stack, elevenlabs, "Arabic voiceover + timestamps")
     Rel(tiktok_stack, youtube, "Downloads footage via yt-dlp")
     Rel(tiktok_stack, rss_feeds, "Scrapes gaming news")
     Rel(tiktok_stack, serpapi, "Searches Google News")
     Rel(tiktok_stack, reddit, "Scrapes trending posts")
-    Rel(tiktok_stack, slack, "Sends approval requests")
+    Rel(tiktok_stack, mattermost, "Sends approval requests")
     Rel(tiktok_stack, buffer, "Publishes videos")
     Rel(buffer, tiktok, "Posts to TikTok")
-    Rel(slack, tiktok_stack, "Approve/reject callbacks")
+    Rel(mattermost, tiktok_stack, "Approve/reject callbacks")
 ```
 
 ### C4 Container Diagram
@@ -51,7 +51,7 @@ C4Container
         Container(n8n, "n8n", "Node.js / Docker", "Workflow orchestrator — schedules, webhooks, step sequencing")
         Container(pipeline, "Pipeline Scripts", "Python 3.11", "8-step pipeline: scrape → script → validate → voiceover → footage → assemble → publish → RAG")
         Container(agents, "AI Agents", "Python", "WriterAgent, ValidatorAgent, ClipAgent — Gemini-powered")
-        Container(services, "Service Layer", "Python", "Gemini, ElevenLabs, NewsScraper, VideoDownloader, SubtitleService, VideoAssembler, Slack, Buffer")
+        Container(services, "Service Layer", "Python", "Gemini, ElevenLabs, NewsScraper, VideoDownloader, SubtitleService, VideoAssembler, Mattermost, Buffer")
         ContainerDb(postgres, "PostgreSQL 16", "pgvector / Docker", "9 tables + vector embeddings, port 5434")
         Container(ffmpeg, "FFmpeg", "CLI", "Video crop/resize/trim, ASS subtitle burn, audio overlay")
     }
@@ -59,10 +59,10 @@ C4Container
     System_Ext(gemini, "Google Gemini API")
     System_Ext(elevenlabs, "ElevenLabs API")
     System_Ext(youtube, "YouTube / yt-dlp")
-    System_Ext(slack, "Slack")
+    System_Ext(mattermost, "Mattermost")
     System_Ext(buffer, "Buffer → TikTok")
 
-    Rel(creator, slack, "Approve / reject")
+    Rel(creator, mattermost, "Approve / reject")
     Rel(n8n, pipeline, "Execute Command nodes")
     Rel(pipeline, agents, "Generate & validate scripts")
     Rel(pipeline, services, "TTS, download, assemble")
@@ -71,9 +71,9 @@ C4Container
     Rel(services, youtube, "yt-dlp download")
     Rel(services, postgres, "Read/write all data")
     Rel(services, ffmpeg, "Video rendering")
-    Rel(services, slack, "Notifications")
+    Rel(services, mattermost, "Notifications")
     Rel(services, buffer, "Publish video")
-    Rel(slack, n8n, "Webhook callbacks")
+    Rel(mattermost, n8n, "Webhook callbacks")
 ```
 
 ---
@@ -90,7 +90,7 @@ flowchart LR
     S6 --> S7["Step 7\nPublish\n(Buffer → TikTok)"]
     S7 --> S8["Step 8\nUpdate RAG\n(Embeddings)"]
     S3 -- "❌ Reject\nAuto-revise (2x)" --> S2
-    S7 --> Slack["Slack Approval\n✅ / ❌"]
+    S7 --> MM["Mattermost Approval\n✅ / ❌"]
 ```
 
 ---
@@ -123,13 +123,13 @@ sudo apt-get install -y fonts-dejavu-core fonts-noto fonts-arabeyes
 
 ### API Keys Required
 
-| Service                  | Key                                          | Purpose                                   |
-| ------------------------ | -------------------------------------------- | ----------------------------------------- |
-| **Google Gemini**        | `GEMINI_API_KEY`                             | Script generation, validation, embeddings |
-| **ElevenLabs**           | `ELEVENLABS_API_KEY` + `ELEVENLABS_VOICE_ID` | Arabic TTS with word timestamps           |
-| **Slack**                | `SLACK_WEBHOOK_URL`                          | Approval notifications                    |
-| **Buffer**               | `BUFFER_ACCESS_TOKEN` + `BUFFER_PROFILE_ID`  | TikTok publishing                         |
-| **SerpApi** _(optional)_ | `SERPAPI_KEY`                                | Google News search                        |
+| Service                  | Key                                                                 | Purpose                                   |
+| ------------------------ | ------------------------------------------------------------------- | ----------------------------------------- |
+| **Google Gemini**        | `GEMINI_API_KEY`                                                    | Script generation, validation, embeddings |
+| **ElevenLabs**           | `ELEVENLABS_API_KEY` + `ELEVENLABS_VOICE_ID`                        | Arabic TTS with word timestamps           |
+| **Mattermost**           | `MATTERMOST_URL` + `MATTERMOST_BOT_TOKEN` + `MATTERMOST_CHANNEL_ID` | Approval notifications                    |
+| **Buffer**               | `BUFFER_ACCESS_TOKEN` + `BUFFER_PROFILE_ID`                         | TikTok publishing                         |
+| **SerpApi** _(optional)_ | `SERPAPI_KEY`                                                       | Google News search                        |
 
 ---
 
@@ -204,7 +204,7 @@ pi_tiktok_stack/
 │   ├── video_downloader.py      # yt-dlp + local fallback
 │   ├── subtitle_service.py      # ASS subtitle generation (word-by-word)
 │   ├── video_assembler.py       # FFmpeg vertical video assembly
-│   ├── slack_service.py         # Block Kit approval messages
+│   ├── mattermost_service.py    # Mattermost approval messages
 │   └── buffer_service.py        # Buffer API → TikTok publishing
 ├── agents/
 │   ├── __init__.py
@@ -220,7 +220,7 @@ pi_tiktok_stack/
 │   ├── step4_generate_voiceover.py # ElevenLabs TTS + timestamps
 │   ├── step5_download_footage.py   # yt-dlp gameplay download
 │   ├── step6_assemble_video.py     # FFmpeg 9:16 video assembly
-│   ├── step7_publish_tiktok.py     # Slack notify / Buffer publish
+│   ├── step7_publish_tiktok.py     # Mattermost notify / Buffer publish
 │   └── step8_update_rag.py         # RAG memory update
 ├── footage/                     # Local footage library (.gitkeep)
 ├── output/                      # Generated videos, voiceovers, subtitles
@@ -351,8 +351,8 @@ Import `n8n_workflow.json` into n8n at `http://<pi-ip>:5679`.
 
 - **Schedule**: Daily at 9:00 AM (trending_news)
 - **Webhook**: `POST /webhook/tiktok-manual` (manual trigger)
-- **Webhook**: `GET /webhook/tiktok-approve` (Slack approve callback)
-- **Webhook**: `GET /webhook/tiktok-reject` (Slack reject callback)
+- **Webhook**: `GET /webhook/tiktok-approve` (Mattermost approve callback)
+- **Webhook**: `GET /webhook/tiktok-reject` (Mattermost reject callback)
 
 ---
 

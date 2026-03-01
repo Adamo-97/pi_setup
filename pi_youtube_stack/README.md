@@ -10,32 +10,32 @@ Fully automated YouTube content-generation microservice for **Raspberry Pi 5**. 
 C4Context
     title System Context — pi_youtube_stack
 
-    Person(human, "Content Creator", "Reviews scripts & audio via Slack, triggers manual pipelines")
+    Person(human, "Content Creator", "Reviews scripts & audio via Mattermost, triggers manual pipelines")
 
     System(pi_stack, "pi_youtube_stack", "Automated Arabic YouTube content pipeline running on Raspberry Pi 5")
 
     System_Ext(gemini, "Google Gemini API", "LLM for script generation, validation, metadata, and embeddings")
     System_Ext(elevenlabs, "ElevenLabs API", "Text-to-speech with cloned Arabic voice")
     System_Ext(rawg, "RAWG.io API", "Video game database — releases, ratings, platforms")
-    System_Ext(slack, "Slack", "Human-in-the-loop approval notifications and callbacks")
+    System_Ext(mattermost, "Mattermost", "Human-in-the-loop approval notifications and callbacks")
 
-    Rel(human, pi_stack, "Triggers pipelines, approves/rejects content", "Slack / HTTP webhook")
+    Rel(human, pi_stack, "Triggers pipelines, approves/rejects content", "Mattermost / HTTP webhook")
     Rel(pi_stack, gemini, "Generates scripts, validates quality, creates embeddings", "HTTPS / REST")
     Rel(pi_stack, elevenlabs, "Converts Arabic scripts to .wav voiceover", "HTTPS / REST")
     Rel(pi_stack, rawg, "Fetches monthly releases, game details", "HTTPS / REST")
-    Rel(pi_stack, slack, "Sends approval requests, error alerts", "Incoming Webhook")
-    Rel(slack, pi_stack, "Delivers approve/reject callbacks", "n8n Webhook")
+    Rel(pi_stack, mattermost, "Sends approval requests, error alerts", "REST API")
+    Rel(mattermost, pi_stack, "Delivers approve/reject callbacks", "n8n Webhook")
 
     UpdateRelStyle(human, pi_stack, $offsetY="-40")
     UpdateRelStyle(pi_stack, gemini, $offsetX="-80")
-    UpdateRelStyle(slack, pi_stack, $offsetY="40")
+    UpdateRelStyle(mattermost, pi_stack, $offsetY="40")
 ```
 
 ```mermaid
 C4Container
     title Container Diagram — pi_youtube_stack
 
-    Person(human, "Content Creator", "Reviews & approves via Slack")
+    Person(human, "Content Creator", "Reviews & approves via Mattermost")
 
     System_Boundary(pi, "Raspberry Pi 5") {
 
@@ -45,7 +45,7 @@ C4Container
 
         Container(agents, "AI Agents", "Python", "Writer Agent (Arabic scripts), Validator Agent (quality scoring), Metadata Agent (SEO titles/tags/description). All call Gemini via services layer.")
 
-        Container(services, "Service Layer", "Python", "Thin wrappers: GeminiService, ElevenLabsService, RAWGService, SlackService, EmbeddingService. Handle retries, auth, response parsing.")
+        Container(services, "Service Layer", "Python", "Thin wrappers: GeminiService, ElevenLabsService, RAWGService, MattermostService, EmbeddingService. Handle retries, auth, response parsing.")
 
         ContainerDb(postgres, "PostgreSQL 16 + pgvector", "Docker / port 5433", "8 tables: games, generated_scripts, validations, metadata, voiceovers, rag_embeddings (vector 768), feedback_log, pipeline_runs")
     }
@@ -53,10 +53,10 @@ C4Container
     System_Ext(gemini, "Google Gemini API", "LLM + Embeddings")
     System_Ext(elevenlabs, "ElevenLabs API", "Arabic TTS")
     System_Ext(rawg, "RAWG.io API", "Game database")
-    System_Ext(slack, "Slack", "Notifications")
+    System_Ext(mattermost, "Mattermost", "Notifications")
 
-    Rel(human, slack, "Clicks Approve / Reject buttons")
-    Rel(slack, n8n, "POST callback to /webhook/slack-approval", "HTTPS")
+    Rel(human, mattermost, "Clicks Approve / Reject buttons")
+    Rel(mattermost, n8n, "POST callback to /webhook/youtube-approve", "HTTPS")
     Rel(human, n8n, "Manual trigger POST /webhook/trigger-pipeline", "HTTPS")
 
     Rel(n8n, scripts, "Execute Command node → python3 scripts/*.py", "stdout JSON")
@@ -68,7 +68,7 @@ C4Container
     Rel(services, gemini, "generate_text, generate_json, generate_embedding", "HTTPS")
     Rel(services, elevenlabs, "Stream TTS audio (PCM → WAV)", "HTTPS")
     Rel(services, rawg, "GET /games, /games/{id}", "HTTPS")
-    Rel(services, slack, "POST rich block messages", "Webhook")
+    Rel(services, mattermost, "POST approval messages", "REST API")
 
     UpdateRelStyle(n8n, scripts, $offsetY="-20")
     UpdateRelStyle(scripts, agents, $offsetX="-40")
@@ -85,8 +85,8 @@ flowchart LR
     S3 -->|"Validator Agent (Gemini)"| S4["4. Generate Metadata"]
     S4 -->|"Metadata Agent (SEO)"| S5["5. Generate Voiceover"]
     S5 -->|"ElevenLabs TTS"| S6["6. Update RAG"]
-    S3 --> SlackA["Slack Step 1\nApproval"]
-    S5 --> SlackB["Slack Step 2\nApproval"]
+    S3 --> MMA["Mattermost Step 1\nApproval"]
+    S5 --> MMB["Mattermost Step 2\nApproval"]
 ```
 
 ---
@@ -152,13 +152,15 @@ nano .env          # fill in every key marked "REQUIRED"
 
 Required API keys:
 
-| Variable              | Where to get it                                                     |
-| --------------------- | ------------------------------------------------------------------- |
-| `GEMINI_API_KEY`      | [Google AI Studio](https://aistudio.google.com/apikey)              |
-| `ELEVENLABS_API_KEY`  | [ElevenLabs Settings](https://elevenlabs.io/app/settings/api-keys)  |
-| `ELEVENLABS_VOICE_ID` | ElevenLabs → Voices → your cloned voice → Copy ID                   |
-| `RAWG_API_KEY`        | [RAWG.io API Docs](https://rawg.io/apidocs) (free, 20 K req/month)  |
-| `SLACK_WEBHOOK_URL`   | [Slack Incoming Webhooks](https://api.slack.com/messaging/webhooks) |
+| Variable                | Where to get it                                                      |
+| ----------------------- | -------------------------------------------------------------------- |
+| `GEMINI_API_KEY`        | [Google AI Studio](https://aistudio.google.com/apikey)               |
+| `ELEVENLABS_API_KEY`    | [ElevenLabs Settings](https://elevenlabs.io/app/settings/api-keys)   |
+| `ELEVENLABS_VOICE_ID`   | ElevenLabs → Voices → your cloned voice → Copy ID                    |
+| `RAWG_API_KEY`          | [RAWG.io API Docs](https://rawg.io/apidocs) (free, 20 K req/month)   |
+| `MATTERMOST_URL`        | Self-hosted Mattermost server URL (e.g. `http://192.168.1.100:8065`) |
+| `MATTERMOST_BOT_TOKEN`  | Personal Access Token for `bot-youtube`                              |
+| `MATTERMOST_CHANNEL_ID` | Channel ID for `#pipeline-youtube`                                   |
 
 ### 6. Start Docker containers
 
@@ -214,13 +216,13 @@ python3 scripts/fetch_game_data.py --type monthly_releases
 # Step 2 — Generate an Arabic script
 python3 scripts/generate_script.py --type monthly_releases
 
-# Step 3 — Validate the script (sends Slack Step 1 approval)
+# Step 3 — Validate the script (sends Mattermost Step 1 approval)
 python3 scripts/validate_script.py --script-id <UUID_FROM_STEP_2>
 
 # Step 4 — Generate YouTube metadata
 python3 scripts/generate_metadata.py --script-id <UUID>
 
-# Step 5 — Generate voiceover (sends Slack Step 2 approval)
+# Step 5 — Generate voiceover (sends Mattermost Step 2 approval)
 python3 scripts/generate_voiceover.py --script-id <UUID>
 
 # Step 6 — Process pending feedback into RAG
@@ -269,7 +271,7 @@ pi_youtube_stack/
 │   ├── gemini_service.py            # generate_text / generate_json / generate_embedding
 │   ├── elevenlabs_service.py        # TTS streaming → PCM → WAV conversion
 │   ├── rawg_service.py              # RAWG REST client + DB UPSERT
-│   ├── slack_service.py             # Rich block messages, approve/reject buttons
+│   ├── mattermost_service.py        # Mattermost approval messages, approve/reject buttons
 │   └── embedding_service.py         # Thin convenience layer over GeminiService
 │
 ├── agents/                          # --- AI Agent System ---
@@ -283,9 +285,9 @@ pi_youtube_stack/
 │   ├── __init__.py
 │   ├── fetch_game_data.py           # 1. RAWG → local DB
 │   ├── generate_script.py           # 2. Writer Agent
-│   ├── validate_script.py           # 3. Validator Agent + Slack Step 1
+│   ├── validate_script.py           # 3. Validator Agent + Mattermost Step 1
 │   ├── generate_metadata.py         # 4. Metadata Agent
-│   ├── generate_voiceover.py        # 5. ElevenLabs TTS + Slack Step 2
+│   ├── generate_voiceover.py        # 5. ElevenLabs TTS + Mattermost Step 2
 │   └── update_rag.py                # 6. Feedback → RAG embeddings
 │
 ├── n8n_workflow/
@@ -306,17 +308,17 @@ pi_youtube_stack/
 
 ---
 
-## Approval Flow (Slack)
+## Approval Flow (Mattermost)
 
-The pipeline uses a **two-step human-in-the-loop** approval via Slack:
+The pipeline uses a **two-step human-in-the-loop** approval via Mattermost:
 
 ```mermaid
 flowchart TD
-    V["Validator passes\n(score ≥ 70)"] --> S1["Slack: Script Preview\n+ Approve / Reject"]
+    V["Validator passes\n(score ≥ 70)"] --> S1["Mattermost: Script Preview\n+ Approve / Reject"]
     S1 -->|"Human reviews\nArabic text quality"| A1{"Approved?"}
     A1 -->|Yes| TTS["ElevenLabs generates\n.wav voiceover"]
     A1 -->|No| RAG1["Feedback → RAG DB"]
-    TTS --> S2["Slack: Audio Details\n+ Approve / Reject"]
+    TTS --> S2["Mattermost: Audio Details\n+ Approve / Reject"]
     S2 -->|"Human listens &\nconfirms tone"| A2{"Approved?"}
     A2 -->|Yes| Done["Pipeline continues"]
     A2 -->|No| RAG2["Feedback → RAG DB"]
@@ -396,35 +398,37 @@ docker-compose down -v && docker-compose up -d
 
 ## Environment Variables
 
-| Variable              | Default                         | Description                |
-| --------------------- | ------------------------------- | -------------------------- |
-| `GEMINI_API_KEY`      | —                               | Google Gemini API key      |
-| `GEMINI_MODEL`        | `gemini-2.5-pro`                | Gemini model name          |
-| `ELEVENLABS_API_KEY`  | —                               | ElevenLabs API key         |
-| `ELEVENLABS_VOICE_ID` | —                               | Cloned voice ID            |
-| `ELEVENLABS_MODEL`    | `eleven_multilingual_v2`        | TTS model                  |
-| `RAWG_API_KEY`        | —                               | RAWG.io API key            |
-| `SLACK_WEBHOOK_URL`   | —                               | Slack incoming webhook URL |
-| `DB_HOST`             | `localhost`                     | PostgreSQL host            |
-| `DB_PORT`             | `5433`                          | PostgreSQL port            |
-| `DB_NAME`             | `youtube_rag`                   | Database name              |
-| `DB_USER`             | `yt_user`                       | Database user              |
-| `DB_PASSWORD`         | `yt_secure_pass_2025`           | Database password          |
-| `N8N_WEBHOOK_BASE`    | `http://localhost:5678/webhook` | n8n webhook base URL       |
+| Variable                | Default                         | Description                           |
+| ----------------------- | ------------------------------- | ------------------------------------- |
+| `GEMINI_API_KEY`        | —                               | Google Gemini API key                 |
+| `GEMINI_MODEL`          | `gemini-2.5-pro`                | Gemini model name                     |
+| `ELEVENLABS_API_KEY`    | —                               | ElevenLabs API key                    |
+| `ELEVENLABS_VOICE_ID`   | —                               | Cloned voice ID                       |
+| `ELEVENLABS_MODEL`      | `eleven_multilingual_v2`        | TTS model                             |
+| `RAWG_API_KEY`          | —                               | RAWG.io API key                       |
+| `MATTERMOST_URL`        | —                               | Self-hosted Mattermost server URL     |
+| `MATTERMOST_BOT_TOKEN`  | —                               | Personal Access Token for bot-youtube |
+| `MATTERMOST_CHANNEL_ID` | —                               | Channel ID for #pipeline-youtube      |
+| `DB_HOST`               | `localhost`                     | PostgreSQL host                       |
+| `DB_PORT`               | `5433`                          | PostgreSQL port                       |
+| `DB_NAME`               | `youtube_rag`                   | Database name                         |
+| `DB_USER`               | `yt_user`                       | Database user                         |
+| `DB_PASSWORD`           | `yt_secure_pass_2025`           | Database password                     |
+| `N8N_WEBHOOK_BASE`      | `http://localhost:5678/webhook` | n8n webhook base URL                  |
 
 ---
 
 ## Troubleshooting
 
-| Problem                  | Solution                                                                                                                      |
-| ------------------------ | ----------------------------------------------------------------------------------------------------------------------------- |
-| `psycopg2` install fails | `sudo apt install libpq-dev gcc` then re-run pip                                                                              |
-| pgvector not found       | Ensure `pgvector/pgvector:pg16` image is used (not plain `postgres`)                                                          |
-| n8n can't find scripts   | Check volume mount in `docker-compose.yml` points to project root                                                             |
-| Gemini rate limit        | Reduce batch sizes, add delays between calls                                                                                  |
-| ElevenLabs quota         | Check usage: `python3 -c "from services.elevenlabs_service import ElevenLabsService; print(ElevenLabsService().get_usage())"` |
-| Slack buttons don't work | Verify `N8N_WEBHOOK_BASE` is accessible from the internet (use ngrok in dev)                                                  |
-| Docker permission denied | `sudo usermod -aG docker $USER` + re-login                                                                                    |
+| Problem                       | Solution                                                                                                                      |
+| ----------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| `psycopg2` install fails      | `sudo apt install libpq-dev gcc` then re-run pip                                                                              |
+| pgvector not found            | Ensure `pgvector/pgvector:pg16` image is used (not plain `postgres`)                                                          |
+| n8n can't find scripts        | Check volume mount in `docker-compose.yml` points to project root                                                             |
+| Gemini rate limit             | Reduce batch sizes, add delays between calls                                                                                  |
+| ElevenLabs quota              | Check usage: `python3 -c "from services.elevenlabs_service import ElevenLabsService; print(ElevenLabsService().get_usage())"` |
+| Mattermost buttons don't work | Verify `N8N_WEBHOOK_BASE` is accessible from your network and Mattermost interactive message actions are configured           |
+| Docker permission denied      | `sudo usermod -aG docker $USER` + re-login                                                                                    |
 
 ---
 

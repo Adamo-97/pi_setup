@@ -194,7 +194,7 @@ class Feedback(BaseModel):
     script_id: Optional[uuid.UUID] = None
     feedback_type: str  # "approval" | "rejection" | "edit" | "note"
     feedback_text: Optional[str] = None
-    source: str = "slack"
+    source: str = "mattermost"
     applied: bool = False
     created_at: Optional[datetime] = None
 

@@ -19,7 +19,7 @@ pydantic>=2.7.0
 # --- Environment Variables ---
 python-dotenv>=1.0.1
 
-# --- HTTP Requests (RAWG, Slack, ElevenLabs) ---
+# --- HTTP Requests (RAWG, Mattermost, ElevenLabs) ---
 requests>=2.32.0
 
 # --- n8n Webhook Utilities (optional) ---

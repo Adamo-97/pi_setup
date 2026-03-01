@@ -9,7 +9,7 @@ Called by n8n after script generation.
 This script:
   1. Reads the script from the database (by script_id)
   2. Invokes the Validator Agent for quality review
-  3. If approved, triggers Slack notification for human approval
+  3. If approved, triggers Mattermost notification for human approval
   4. Outputs structured JSON with validation results
 
 Usage (n8n Execute Command):
@@ -23,7 +23,7 @@ Output (stdout JSON):
         "overall_score": 85,
         "summary": "...",
         "script_id": "uuid",
-        "slack_sent": true
+        "mattermost_sent": true
     }
 """
 
@@ -38,7 +38,7 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
 from agents.validator_agent import ValidatorAgent
-from services.slack_service import SlackService
+from services.mattermost_service import MattermostService
 from database.connection import execute_query
 
 # ---------------------------------------------------------------------------
@@ -87,7 +87,7 @@ def main():
         "--from-stdin", action="store_true", help="Read JSON input from stdin."
     )
     parser.add_argument(
-        "--skip-slack", action="store_true", help="Skip Slack notification."
+        "--skip-notify", action="store_true", help="Skip Mattermost notification."
     )
 
     args = parser.parse_args()
@@ -152,13 +152,13 @@ def main():
         )
 
         # ------------------------------------------------------------------
-        # Send to Slack if approved (Step 1 of approval flow)
+        # Send to Mattermost if approved (Step 1 of approval flow)
         # ------------------------------------------------------------------
-        slack_sent = False
-        if result.get("approved") and not args.skip_slack:
+        mattermost_sent = False
+        if result.get("approved") and not args.skip_notify:
             try:
-                slack = SlackService()
-                slack_sent = slack.send_script_for_approval(
+                mm = MattermostService()
+                mattermost_sent = mm.send_script_for_approval(
                     script_id=script_id,
                     content_type=content_type,
                     title=title,
@@ -168,26 +168,26 @@ def main():
                     game_count=len(games_data),
                     pipeline_run_id=pipeline_run_id,
                 )
-                logger.info("Slack script approval sent: %s", slack_sent)
+                logger.info("Mattermost script approval sent: %s", mattermost_sent)
             except Exception as exc:
-                logger.error("Failed to send Slack notification: %s", exc)
+                logger.error("Failed to send Mattermost notification: %s", exc)
 
         elif not result.get("approved"):
             # Notify about rejection
             try:
-                slack = SlackService()
-                slack.send_notification(
+                mm = MattermostService()
+                mm.send_notification(
                     f"❌ سكريبت '{title}' رُفض بواسطة الـ AI.\n"
                     f"التقييم: {result.get('overall_score', 0)}/100\n"
                     f"السبب: {result.get('summary', 'N/A')}",
-                    emoji="🚫",
+                    emoji=":no_entry_sign:",
                 )
             except Exception:
                 pass
 
-        # Add success flag and slack status
+        # Add success flag and notification status
         result["success"] = True
-        result["slack_sent"] = slack_sent
+        result["mattermost_sent"] = mattermost_sent
         result["title"] = title
 
     except Exception as exc:

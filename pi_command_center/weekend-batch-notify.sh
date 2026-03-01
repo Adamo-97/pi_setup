@@ -2,7 +2,7 @@
 # ============================================================================
 # weekend-batch-notify.sh — Weekend Publishing Approval Notifier
 # ============================================================================
-# Sends a batched Slack notification summarizing queued content from all
+# Sends a batched Mattermost notification summarizing queued content from all
 # n8n pipelines. Only runs on Saturday (6) and Sunday (0) — silently
 # exits on weekdays.
 #
@@ -23,7 +23,9 @@ if [[ -f "${SCRIPT_DIR}/.env" ]]; then
     set +a
 fi
 
-SLACK_WEBHOOK="${SLACK_BATCH_WEBHOOK_URL:-}"
+MM_URL="${MATTERMOST_URL:-}"
+MM_TOKEN="${MATTERMOST_BOT_TOKEN:-}"
+MM_CHANNEL="${MATTERMOST_BATCH_CHANNEL_ID:-${MATTERMOST_CHANNEL_ID:-}}"
 DAY_OF_WEEK=$(date +%u)  # 1=Monday ... 6=Saturday, 7=Sunday
 
 # ── Guard: Only run on Saturday (6) or Sunday (7) ──────────────────────────
@@ -32,8 +34,8 @@ if [[ "$DAY_OF_WEEK" -lt 6 ]]; then
     exit 0
 fi
 
-if [[ -z "$SLACK_WEBHOOK" ]]; then
-    echo "[$(date '+%Y-%m-%d %H:%M:%S')] ERROR: SLACK_BATCH_WEBHOOK_URL not set in .env"
+if [[ -z "$MM_URL" ]] || [[ -z "$MM_TOKEN" ]] || [[ -z "$MM_CHANNEL" ]]; then
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] ERROR: MATTERMOST_URL, MATTERMOST_BOT_TOKEN, and MATTERMOST_BATCH_CHANNEL_ID must be set in .env"
     exit 1
 fi
 
@@ -47,7 +49,7 @@ PIPELINES=(
     "n8n_x:X/Twitter:5681"
 )
 
-STATUS_BLOCKS=""
+STATUS_LINES=""
 TOTAL_RUNNING=0
 TOTAL_STOPPED=0
 
@@ -56,22 +58,21 @@ for entry in "${PIPELINES[@]}"; do
 
     # Check if container is running
     if docker inspect --format='{{.State.Running}}' "$container" 2>/dev/null | grep -q true; then
-        state="✅ Running"
+        state=":white_check_mark: Running"
         ((TOTAL_RUNNING++)) || true
     else
-        state="🔴 Down"
+        state=":red_circle: Down"
         ((TOTAL_STOPPED++)) || true
     fi
 
     # Check n8n health endpoint
-    workflow_count="N/A"
     if command -v curl &>/dev/null; then
         health=$(curl -sf "http://localhost:${port}/healthz" 2>/dev/null && echo "healthy" || echo "unreachable")
     else
         health="unknown"
     fi
 
-    STATUS_BLOCKS="${STATUS_BLOCKS}• *${label}* — ${state} (health: ${health})\n"
+    STATUS_LINES="${STATUS_LINES}\n| **${label}** | ${state} | ${health} |"
 done
 
 # ── Check database containers ──────────────────────────────────────────────
@@ -82,98 +83,71 @@ DB_CONTAINERS=(
     "postgres_x:X/Twitter DB"
 )
 
-DB_BLOCKS=""
+DB_LINES=""
 for entry in "${DB_CONTAINERS[@]}"; do
     IFS=':' read -r container label <<< "$entry"
     if docker inspect --format='{{.State.Running}}' "$container" 2>/dev/null | grep -q true; then
-        DB_BLOCKS="${DB_BLOCKS}• *${label}* — ✅ Running\n"
+        DB_LINES="${DB_LINES}\n| **${label}** | :white_check_mark: Running |"
     else
-        DB_BLOCKS="${DB_BLOCKS}• *${label}* — 🔴 Down\n"
+        DB_LINES="${DB_LINES}\n| **${label}** | :red_circle: Down |"
     fi
 done
 
 # ── Check Pi-hole ──────────────────────────────────────────────────────────
 if docker inspect --format='{{.State.Running}}' pihole 2>/dev/null | grep -q true; then
-    PIHOLE_STATUS="✅ Running"
+    PIHOLE_STATUS=":white_check_mark: Running"
 else
-    PIHOLE_STATUS="🔴 Down"
+    PIHOLE_STATUS=":red_circle: Down"
 fi
 
-# ── Build Slack message ────────────────────────────────────────────────────
+# ── Build Mattermost message ───────────────────────────────────────────────
 DAY_NAME=$(date +%A)
 DATE_STR=$(date '+%B %d, %Y')
 
-PAYLOAD=$(cat <<EOF
-{
-  "blocks": [
-    {
-      "type": "header",
-      "text": {
-        "type": "plain_text",
-        "text": "📋 Weekend Status Report — ${DAY_NAME}, ${DATE_STR}"
-      }
-    },
-    {
-      "type": "section",
-      "text": {
-        "type": "mrkdwn",
-        "text": "*Content Pipelines (n8n)*\n${STATUS_BLOCKS}"
-      }
-    },
-    {
-      "type": "divider"
-    },
-    {
-      "type": "section",
-      "text": {
-        "type": "mrkdwn",
-        "text": "*Databases*\n${DB_BLOCKS}"
-      }
-    },
-    {
-      "type": "divider"
-    },
-    {
-      "type": "section",
-      "text": {
-        "type": "mrkdwn",
-        "text": "*Infrastructure*\n• *Pi-hole DNS* — ${PIHOLE_STATUS}\n• *Uptime Kuma* — check dashboard for full history"
-      }
-    },
-    {
-      "type": "divider"
-    },
-    {
-      "type": "section",
-      "text": {
-        "type": "mrkdwn",
-        "text": "📊 *Summary:* ${TOTAL_RUNNING} pipelines running, ${TOTAL_STOPPED} down\n🔗 <http://${HOST_IP:-192.168.1.100}:3010|Open Dashboard> | <http://${HOST_IP:-192.168.1.100}:3001|Uptime Kuma>"
-      }
-    },
-    {
-      "type": "context",
-      "elements": [
-        {
-          "type": "mrkdwn",
-          "text": "🤖 Sent by pi_command_center weekend-batch-notify.sh"
-        }
-      ]
-    }
-  ]
-}
-EOF
-)
+MESSAGE="### :clipboard: Weekend Status Report — ${DAY_NAME}, ${DATE_STR}
 
-# ── Send to Slack ──────────────────────────────────────────────────────────
+**Content Pipelines (n8n)**
+
+| Pipeline | Status | Health |
+|:---------|:-------|:-------|${STATUS_LINES}
+
+---
+
+**Databases**
+
+| Database | Status |
+|:---------|:-------|${DB_LINES}
+
+---
+
+**Infrastructure**
+- **Pi-hole DNS** — ${PIHOLE_STATUS}
+- **Uptime Kuma** — check dashboard for full history
+
+---
+
+:bar_chart: **Summary:** ${TOTAL_RUNNING} pipelines running, ${TOTAL_STOPPED} down
+:link: [Open Dashboard](http://${HOST_IP:-192.168.1.100}:3010) | [Uptime Kuma](http://${HOST_IP:-192.168.1.100}:3001)
+
+---
+_:robot: Sent by pi_command_center weekend-batch-notify.sh_"
+
+# ── Send to Mattermost ────────────────────────────────────────────────────
+# Escape the message for JSON (handle newlines, quotes)
+ESCAPED_MESSAGE=$(printf '%s' "$MESSAGE" | python3 -c "import sys,json; print(json.dumps(sys.stdin.read()))")
+
+PAYLOAD="{\"channel_id\": \"${MM_CHANNEL}\", \"message\": ${ESCAPED_MESSAGE}}"
+
 HTTP_CODE=$(curl -sf -o /dev/null -w "%{http_code}" \
     -X POST \
+    -H "Authorization: Bearer ${MM_TOKEN}" \
     -H "Content-Type: application/json" \
     -d "$PAYLOAD" \
-    "$SLACK_WEBHOOK")
+    "${MM_URL}/api/v4/posts")
 
-if [[ "$HTTP_CODE" == "200" ]]; then
-    echo "[$(date '+%Y-%m-%d %H:%M:%S')] Weekend batch notification sent to Slack (HTTP $HTTP_CODE)"
+if [[ "$HTTP_CODE" == "201" ]] || [[ "$HTTP_CODE" == "200" ]]; then
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] Weekend batch notification sent to Mattermost (HTTP $HTTP_CODE)"
 else
-    echo "[$(date '+%Y-%m-%d %H:%M:%S')] ERROR: Slack webhook returned HTTP $HTTP_CODE"
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] ERROR: Mattermost API returned HTTP $HTTP_CODE"
     exit 1
 fi

@@ -3,9 +3,9 @@
 """
 Step 7: Publish to X/Twitter
 ==============================
-Sends video to Slack for approval, then publishes to X via Buffer.
+Sends video to Mattermost for approval, then publishes to X via Buffer.
 Can run in two modes:
-  - 'notify': Send Slack approval request (default from pipeline)
+  - 'notify': Send Mattermost approval request (default from pipeline)
   - 'publish': Actually publish to Buffer (called by n8n after approval)
 
 Usage:
@@ -24,7 +24,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from config.settings import get_settings
 from database.connection import execute_query
 from services.buffer_service import BufferService
-from services.slack_service import SlackService
+from services.mattermost_service import MattermostService
 
 logging.basicConfig(
     level=logging.INFO,
@@ -39,7 +39,7 @@ def main(video_id: str, mode: str = "notify") -> dict:
 
     Args:
         video_id: UUID of the rendered video
-        mode: 'notify' (Slack approval) or 'publish' (Buffer upload)
+        mode: 'notify' (Mattermost approval) or 'publish' (Buffer upload)
 
     Returns:
         dict with status and details
@@ -109,9 +109,11 @@ def _send_approval(
     video_path: str,
     settings,
 ) -> dict:
-    """Send Slack approval request."""
-    slack = SlackService(
-        webhook_url=settings.slack.webhook_url,
+    """Send Mattermost approval request."""
+    mm = MattermostService(
+        url=settings.mattermost.url,
+        bot_token=settings.mattermost.bot_token,
+        channel_id=settings.mattermost.channel_id,
         n8n_base_url=f"http://localhost:{settings.n8n.port}",
     )
 
@@ -135,7 +137,7 @@ def _send_approval(
     )
     news_titles = [r[0] for r in news_rows] if news_rows else []
 
-    success = slack.send_approval_request(
+    success = mm.send_approval_request(
         script_id=script_id,
         video_id=video_id,
         script_text=script_text,
@@ -155,13 +157,13 @@ def _send_approval(
     result = {
         "video_id": video_id,
         "mode": "notify",
-        "slack_sent": success,
+        "mattermost_sent": success,
         "validation_score": validation_score,
         "tweet_text": tweet_text,
     }
 
     logger.info(
-        "Slack approval sent: %s (score: %d)",
+        "Mattermost approval sent: %s (score: %d)",
         "✅" if success else "❌",
         validation_score,
     )
@@ -214,13 +216,15 @@ def _publish_to_buffer(
             (pub_result.get("update_id", ""), video_id),
         )
 
-        # Send Slack confirmation
+        # Send Mattermost confirmation
         try:
-            slack = SlackService(
-                webhook_url=settings.slack.webhook_url,
+            mm = MattermostService(
+                url=settings.mattermost.url,
+                bot_token=settings.mattermost.bot_token,
+                channel_id=settings.mattermost.channel_id,
                 n8n_base_url=f"http://localhost:{settings.n8n.port}",
             )
-            slack.send_publish_confirmation(
+            mm.send_publish_confirmation(
                 video_id=video_id,
                 buffer_update_id=pub_result.get("update_id", "unknown"),
                 title=caption[:50],
@@ -254,7 +258,7 @@ if __name__ == "__main__":
         "--mode",
         choices=["notify", "publish"],
         default="notify",
-        help="notify=Slack approval, publish=Buffer upload",
+        help="notify=Mattermost approval, publish=Buffer upload",
     )
     args = parser.parse_args()
     main(video_id=args.video_id, mode=args.mode)

@@ -324,7 +324,7 @@ class RAGManager:
         feedback_type: str,
         feedback_text: str,
         embedding: list[float],
-        source: str = "slack",
+        source: str = "mattermost",
     ) -> uuid.UUID:
         """
         Store human feedback and its embedding for future learning.

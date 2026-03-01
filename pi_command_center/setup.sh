@@ -74,7 +74,7 @@ if [[ ! -f .env ]]; then
         log "Auto-detected host IP: ${DETECTED_IP}"
     fi
 
-    warn ".env created from template — edit it to set your Slack webhook URLs:"
+    warn ".env created from template — edit it to set your Mattermost connection details:"
     echo "    nano ${SCRIPT_DIR}/.env"
 else
     log ".env already exists — skipping"
@@ -195,9 +195,9 @@ echo "  ── Next Steps ──"
 echo ""
 echo "  1. Open Uptime Kuma and create your admin account"
 echo "  2. Add monitors for all your services (see README)"
-echo "  3. Configure Slack webhook in Uptime Kuma settings"
-echo "  4. Edit .env to set SLACK_BATCH_WEBHOOK_URL for"
-echo "     weekend publishing approval notifications"
+echo "  3. Configure Mattermost webhook in Uptime Kuma settings"
+echo "  4. Edit .env to set MATTERMOST_URL, MATTERMOST_BOT_TOKEN,"
+echo "     MATTERMOST_CHANNEL_ID, and MATTERMOST_BATCH_CHANNEL_ID"
 echo "  5. Customize Homepage: nano homepage/services.yaml"
 echo ""
 echo "  ── Useful Commands ──"
