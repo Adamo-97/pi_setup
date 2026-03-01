@@ -89,25 +89,17 @@ C4Container
 
 ### Alerting Flow
 
+```mermaid
+flowchart LR
+    subgraph immediate["Immediate Alerts — 24/7"]
+        UK["Uptime Kuma\n(24/7 ping)"] -- "Service Down?\nYES → alert NOW" --> IW["IMMEDIATE\nWebhook"] --> SA["Slack\n#alerts"]
+    end
+    subgraph batched["Weekend Reports — Sat/Sun 10 AM"]
+        CJ["Cron Job\n(weekend)"] -- "Status report" --> BS["BATCHED\nSummary"] --> SW["Slack\n#weekend"]
+    end
 ```
-┌──────────────────────────────────────────────────────────────────────────┐
-│                        ALERTING STRATEGY                                 │
-├──────────────────────────────────────────────────────────────────────────┤
-│                                                                          │
-│  ┌─────────────┐    Service Down?     ┌─────────────┐     ┌───────────┐ │
-│  │ Uptime Kuma │───────────────────▶  │   IMMEDIATE │────▶│  Slack    │ │
-│  │ (24/7 ping) │    YES → alert NOW   │   Webhook   │     │  #alerts  │ │
-│  └─────────────┘                      └─────────────┘     └───────────┘ │
-│                                                                          │
-│  ┌─────────────┐    Sat/Sun 10 AM     ┌─────────────┐     ┌───────────┐ │
-│  │ Cron Job    │───────────────────▶  │   BATCHED   │────▶│  Slack    │ │
-│  │ (weekend)   │    Status report     │   Summary   │     │  #weekend │ │
-│  └─────────────┘                      └─────────────┘     └───────────┘ │
-│                                                                          │
-│  RULE: Downtime alerts = IMMEDIATE (any time)                            │
-│        Status reports / approvals = WEEKEND ONLY (Saturday & Sunday)     │
-└──────────────────────────────────────────────────────────────────────────┘
-```
+
+> **Rule:** Downtime alerts = IMMEDIATE (any time). Status reports / approvals = WEEKEND ONLY (Saturday & Sunday).
 
 ## Prerequisites
 

@@ -62,19 +62,13 @@ C4Container
 
 ### DNS Resolution Flow
 
-```
-┌──────────┐     ┌──────────┐     ┌──────────┐     ┌──────────────┐     ┌─────────────┐
-│  Device   │────▶│  Router   │────▶│ Pi-hole   │────▶│   Unbound    │────▶│ Root DNS    │
-│ (phone,   │     │ DNS=Pi IP │     │ :53       │     │ :5335        │     │ Servers     │
-│  laptop)  │     │           │     │           │     │ (recursive)  │     │             │
-└──────────┘     └──────────┘     └──────────┘     └──────────────┘     └─────────────┘
-                                        │
-                                        │ Ad domain?
-                                        ▼
-                                   ┌──────────┐
-                                   │ 0.0.0.0  │
-                                   │ (blocked) │
-                                   └──────────┘
+```mermaid
+flowchart LR
+    Device["Device\n(phone, laptop)"] --> Router["Router\nDNS=Pi IP"] --> PiHole["Pi-hole\n:53"]
+    PiHole --> Unbound["Unbound\n:5335\n(recursive)"] --> Root["Root DNS\nServers"]
+    PiHole -- "Ad domain?" --> Blocked["0.0.0.0\n(blocked)"]
+
+    style Blocked fill:#ff6b6b,color:#fff
 ```
 
 ## Prerequisites

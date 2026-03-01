@@ -68,15 +68,15 @@ All four stacks run independently on the same Raspberry Pi 5:
 
 ## Pipeline Steps
 
-```
-Step 1: Scrape News         — RSS, Google News, Reddit gaming sources
-Step 2: Generate Script     — Gemini AI writes provocative Arabic script + tweet caption
-Step 3: Validate Script     — 7-criteria quality gate (x_fit, hook_strength, etc.)
-Step 4: Generate Voiceover  — ElevenLabs Arabic TTS with word timestamps
-Step 5: Download Footage    — yt-dlp YouTube clips + local fallback
-Step 6: Assemble Video      — FFmpeg 1080×1920 vertical + ASS karaoke subtitles
-Step 7: Publish to X        — Slack approval → Buffer API → X/Twitter
-Step 8: Update RAG          — Store embeddings & feedback for future context
+```mermaid
+flowchart LR
+    S1["1. Scrape News\nRSS / Google / Reddit"] --> S2["2. Generate Script\nGemini AI + tweet caption"]
+    S2 --> S3["3. Validate Script\n7-criteria quality gate"]
+    S3 --> S4["4. Generate Voiceover\nElevenLabs Arabic TTS"]
+    S4 --> S5["5. Download Footage\nyt-dlp + local fallback"]
+    S5 --> S6["6. Assemble Video\nFFmpeg 1080×1920 + ASS"]
+    S6 --> S7["7. Publish to X\nSlack → Buffer → X"]
+    S7 --> S8["8. Update RAG\nEmbeddings & feedback"]
 ```
 
 ## Content Types

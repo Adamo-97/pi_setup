@@ -78,13 +78,15 @@ C4Container
 
 ## Pipeline Flow
 
-```
-1. Fetch Game Data   ─►  RAWG API → local DB
-2. Generate Script   ─►  Writer Agent (Gemini) + RAG context
-3. Validate Script   ─►  Validator Agent (Gemini) → Slack Step 1 approval
-4. Generate Metadata ─►  Metadata Agent (titles, tags, SEO)
-5. Generate Voiceover─►  ElevenLabs TTS → Slack Step 2 approval
-6. Update RAG        ─►  Store feedback for future learning
+```mermaid
+flowchart LR
+    S1["1. Fetch Game Data"] -->|"RAWG API → local DB"| S2["2. Generate Script"]
+    S2 -->|"Writer Agent (Gemini) + RAG"| S3["3. Validate Script"]
+    S3 -->|"Validator Agent (Gemini)"| S4["4. Generate Metadata"]
+    S4 -->|"Metadata Agent (SEO)"| S5["5. Generate Voiceover"]
+    S5 -->|"ElevenLabs TTS"| S6["6. Update RAG"]
+    S3 --> SlackA["Slack Step 1\nApproval"]
+    S5 --> SlackB["Slack Step 2\nApproval"]
 ```
 
 ---
@@ -308,16 +310,16 @@ pi_youtube_stack/
 
 The pipeline uses a **two-step human-in-the-loop** approval via Slack:
 
-```
-Step 1: Script Text Approval
-  → Validator passes (score ≥ 70)
-  → Slack message with script preview + Approve/Reject buttons
-  → Human reviews Arabic text quality
-
-Step 2: Audio Approval
-  → ElevenLabs generates .wav voiceover
-  → Slack message with audio details + Approve/Reject buttons
-  → Human listens and confirms pronunciation/tone
+```mermaid
+flowchart TD
+    V["Validator passes\n(score ≥ 70)"] --> S1["Slack: Script Preview\n+ Approve / Reject"]
+    S1 -->|"Human reviews\nArabic text quality"| A1{"Approved?"}
+    A1 -->|Yes| TTS["ElevenLabs generates\n.wav voiceover"]
+    A1 -->|No| RAG1["Feedback → RAG DB"]
+    TTS --> S2["Slack: Audio Details\n+ Approve / Reject"]
+    S2 -->|"Human listens &\nconfirms tone"| A2{"Approved?"}
+    A2 -->|Yes| Done["Pipeline continues"]
+    A2 -->|No| RAG2["Feedback → RAG DB"]
 ```
 
 Rejection feedback is automatically stored in the RAG database so the Writer Agent learns from mistakes.

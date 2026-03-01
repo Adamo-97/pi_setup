@@ -80,27 +80,17 @@ C4Container
 
 ## Pipeline Flow
 
-```
-┌─────────────┐    ┌─────────────┐    ┌─────────────┐    ┌─────────────┐
-│  Step 1      │    │  Step 2      │    │  Step 3      │    │  Step 4      │
-│  Scrape News │───▶│  Generate    │───▶│  Validate    │───▶│  Generate    │
-│  RSS/Google/ │    │  Script      │    │  Script      │    │  Voiceover   │
-│  Reddit      │    │  (Gemini)    │    │  (AI Gate)   │    │  (ElevenLabs)│
-└─────────────┘    └─────────────┘    └──────┬───────┘    └─────────────┘
-                                             │ ❌ Reject                    │
-                                             │ → Auto-revise (2x)          ▼
-┌─────────────┐    ┌─────────────┐    ┌─────────────┐    ┌─────────────┐
-│  Step 8      │    │  Step 7      │    │  Step 6      │    │  Step 5      │
-│  Update RAG  │◀───│  Publish     │◀───│  Assemble    │◀───│  Download    │
-│  (Embeddings)│    │  (Buffer →   │    │  Video       │    │  Footage     │
-│              │    │   TikTok)    │    │  (FFmpeg)    │    │  (yt-dlp)    │
-└─────────────┘    └──────┬───────┘    └─────────────┘    └─────────────┘
-                          │
-                   ┌──────┴───────┐
-                   │  Slack       │
-                   │  Approval    │
-                   │  ✅ / ❌     │
-                   └──────────────┘
+```mermaid
+flowchart LR
+    S1["Step 1\nScrape News\nRSS/Google/Reddit"] --> S2["Step 2\nGenerate Script\n(Gemini)"]
+    S2 --> S3["Step 3\nValidate Script\n(AI Gate)"]
+    S3 --> S4["Step 4\nGenerate Voiceover\n(ElevenLabs)"]
+    S4 --> S5["Step 5\nDownload Footage\n(yt-dlp)"]
+    S5 --> S6["Step 6\nAssemble Video\n(FFmpeg)"]
+    S6 --> S7["Step 7\nPublish\n(Buffer → TikTok)"]
+    S7 --> S8["Step 8\nUpdate RAG\n(Embeddings)"]
+    S3 -- "❌ Reject\nAuto-revise (2x)" --> S2
+    S7 --> Slack["Slack Approval\n✅ / ❌"]
 ```
 
 ---

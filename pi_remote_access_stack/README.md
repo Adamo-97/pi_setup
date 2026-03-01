@@ -83,38 +83,17 @@ C4Container
 
 ### Traffic Flow
 
+```mermaid
+flowchart LR
+    subgraph private["PRIVATE ACCESS — Admin Only"]
+        WL["Work Laptop"] -- "WireGuard\n(outbound)" --> TSN["Tailscale\nNetwork"] -- "Tunnel\n(outbound)" --> Pi5A["Pi 5\n:22 SSH, :3010,\n:8443, :*"]
+    end
+    subgraph public["PUBLIC ACCESS — Anyone with URL"]
+        PV["Public Visitor"] -- "HTTPS" --> CFE["Cloudflare\nEdge"] -- "QUIC\n(outbound)" --> Pi5B["Pi 5\n:8443, :3010, :3001"]
+    end
 ```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                        ZERO-TRUST ACCESS MODEL                              │
-│                    NO inbound ports on home router                           │
-├─────────────────────────────────────────────────────────────────────────────┤
-│                                                                             │
-│  PRIVATE ACCESS (Admin only)                                                │
-│  ─────────────────────────────────────────────────                          │
-│                                                                             │
-│  ┌──────────┐  WireGuard   ┌───────────┐  Tunnel   ┌─────────┐            │
-│  │  Work    │─────────────▶│ Tailscale │──────────▶│  Pi 5   │            │
-│  │  Laptop  │  (outbound)  │ Network   │ (outbound)│ :22 SSH │            │
-│  └──────────┘              └───────────┘           │ :3010   │            │
-│       │                                            │ :8443   │            │
-│       └── tailscale ssh pi5                        │ :*      │            │
-│       └── http://100.x.x.x:3010 (Homepage)        └─────────┘            │
-│                                                                             │
-│  PUBLIC ACCESS (Anyone with the URL)                                        │
-│  ─────────────────────────────────────                                      │
-│                                                                             │
-│  ┌──────────┐   HTTPS    ┌───────────┐  QUIC     ┌─────────┐             │
-│  │  Public  │───────────▶│Cloudflare │──────────▶│  Pi 5   │             │
-│  │  Visitor │            │   Edge    │ (outbound)│ :8443   │             │
-│  └──────────┘            └───────────┘           │ :3010   │             │
-│       │                                          │ :3001   │             │
-│       └── https://cloud.example.com              └─────────┘             │
-│       └── https://dash.example.com                                        │
-│                                                                             │
-│  HOME ROUTER: 0 ports forwarded                                             │
-│  ALL tunnels: outbound from Pi → encrypted → relay → client                │
-└─────────────────────────────────────────────────────────────────────────────┘
-```
+
+> **Zero-Trust Model:** Home router has 0 ports forwarded. All tunnels are outbound from Pi → encrypted → relay → client.
 
 ## Prerequisites
 

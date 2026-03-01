@@ -79,26 +79,31 @@ C4Container
 
 ### File Flow: n8n → NVMe → Nextcloud → Desktop
 
-```
-┌──────────────────┐     ┌─────────────────────────────────┐     ┌──────────────┐
-│  n8n Pipelines   │     │        NVMe SSD                  │     │   Desktop    │
-│                  │     │   /mnt/nvme/ai-content/          │     │   Client     │
-│ YouTube n8n ─────┼────▶│   ├── youtube/ ──┐               │     │              │
-│ TikTok n8n ──────┼────▶│   ├── tiktok/  ──┤  ┌──────────┐│     │              │
-│ Instagram n8n ───┼────▶│   ├── instagram/─┼─▶│ Nextcloud ││────▶│  Synced      │
-│ X/Twitter n8n ───┼────▶│   └── x/  ───────┘  │ occ scan  ││     │  Folders     │
-│                  │     │                      └──────────┘│     │              │
-│  (weekday gen)   │     │   Permissions: www-data (UID 33) │     │ (weekend     │
-│                  │     │   Scan: every 15 min via cron    │     │  review)     │
-└──────────────────┘     └─────────────────────────────────┘     └──────────────┘
-                                                                        │
-                                                                        ▼
-                                                                 ┌──────────────┐
-                                                                 │    Slack      │
-                                                                 │  (Sat/Sun)   │
-                                                                 │  Approval    │
-                                                                 │  Webhooks    │
-                                                                 └──────────────┘
+```mermaid
+flowchart LR
+    subgraph pipelines["n8n Pipelines\n(weekday generation)"]
+        YT[YouTube n8n]
+        TT[TikTok n8n]
+        IG[Instagram n8n]
+        X[X/Twitter n8n]
+    end
+
+    subgraph nvme["NVMe SSD\n/mnt/nvme/ai-content/"]
+        dirs["youtube/\ntiktok/\ninstagram/\nx/"]
+        NC["Nextcloud\nocc scan\n(every 15 min)"]
+    end
+
+    subgraph desktop["Desktop Client\n(weekend review)"]
+        SF[Synced Folders]
+    end
+
+    YT --> dirs
+    TT --> dirs
+    IG --> dirs
+    X --> dirs
+    dirs --> NC
+    NC --> SF
+    SF --> Slack["Slack\n(Sat/Sun)\nApproval Webhooks"]
 ```
 
 ## Prerequisites
