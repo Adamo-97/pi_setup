@@ -118,15 +118,15 @@ C4Container
 
 ## Prerequisites
 
-| Requirement | Version | Notes |
-|-------------|---------|-------|
-| Raspberry Pi 5 | ARM64 | 4 GB+ RAM |
-| Raspberry Pi OS | Bookworm (64-bit) | Or any Debian-based ARM64 distro |
-| Docker | 24.0+ | `curl -fsSL https://get.docker.com \| sh` |
-| Docker Compose | v2.20+ | `sudo apt install docker-compose-plugin` |
-| Tailscale Account | Free tier | [login.tailscale.com](https://login.tailscale.com) |
-| Cloudflare Account | Free tier | [dash.cloudflare.com](https://dash.cloudflare.com) |
-| Domain Name | — | Managed by Cloudflare DNS |
+| Requirement        | Version           | Notes                                              |
+| ------------------ | ----------------- | -------------------------------------------------- |
+| Raspberry Pi 5     | ARM64             | 4 GB+ RAM                                          |
+| Raspberry Pi OS    | Bookworm (64-bit) | Or any Debian-based ARM64 distro                   |
+| Docker             | 24.0+             | `curl -fsSL https://get.docker.com \| sh`          |
+| Docker Compose     | v2.20+            | `sudo apt install docker-compose-plugin`           |
+| Tailscale Account  | Free tier         | [login.tailscale.com](https://login.tailscale.com) |
+| Cloudflare Account | Free tier         | [dash.cloudflare.com](https://dash.cloudflare.com) |
+| Domain Name        | —                 | Managed by Cloudflare DNS                          |
 
 ## Quick Start
 
@@ -176,15 +176,15 @@ pi_remote_access_stack/
 
 ### Environment Variables (`.env`)
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `TZ` | `Asia/Riyadh` | Timezone |
-| `HOST_IP` | `192.168.1.100` | Pi's static LAN IP |
-| `LAN_SUBNET` | `192.168.1.0/24` | Home network subnet for Tailscale routing |
-| `TAILSCALE_AUTHKEY` | — | Auth key from Tailscale admin (**required**) |
-| `TAILSCALE_HOSTNAME` | `pi5` | How the Pi appears on your tailnet |
-| `CLOUDFLARE_TUNNEL_TOKEN` | — | Tunnel token from Cloudflare dashboard (**required**) |
-| `CLOUDFLARE_DOMAIN` | `example.com` | Your Cloudflare-managed domain |
+| Variable                  | Default          | Description                                           |
+| ------------------------- | ---------------- | ----------------------------------------------------- |
+| `TZ`                      | `Asia/Riyadh`    | Timezone                                              |
+| `HOST_IP`                 | `192.168.1.100`  | Pi's static LAN IP                                    |
+| `LAN_SUBNET`              | `192.168.1.0/24` | Home network subnet for Tailscale routing             |
+| `TAILSCALE_AUTHKEY`       | —                | Auth key from Tailscale admin (**required**)          |
+| `TAILSCALE_HOSTNAME`      | `pi5`            | How the Pi appears on your tailnet                    |
+| `CLOUDFLARE_TUNNEL_TOKEN` | —                | Tunnel token from Cloudflare dashboard (**required**) |
+| `CLOUDFLARE_DOMAIN`       | `example.com`    | Your Cloudflare-managed domain                        |
 
 ## Tailscale Setup
 
@@ -263,16 +263,16 @@ tailscale ssh pi5
 5. Copy the **tunnel token** → paste into `.env` as `CLOUDFLARE_TUNNEL_TOKEN`
 6. Add public hostnames:
 
-| Subdomain | Domain | Service |
-|-----------|--------|---------|
-| `cloud` | `yourdomain.com` | `http://192.168.1.100:8443` |
-| `dash` | `yourdomain.com` | `http://192.168.1.100:3010` |
-| `status` | `yourdomain.com` | `http://192.168.1.100:3001` |
-| `pihole` | `yourdomain.com` | `http://192.168.1.100:8080` |
-| `yt` | `yourdomain.com` | `http://192.168.1.100:5678` |
-| `tt` | `yourdomain.com` | `http://192.168.1.100:5679` |
-| `ig` | `yourdomain.com` | `http://192.168.1.100:5680` |
-| `x` | `yourdomain.com` | `http://192.168.1.100:5681` |
+| Subdomain | Domain           | Service                     |
+| --------- | ---------------- | --------------------------- |
+| `cloud`   | `yourdomain.com` | `http://192.168.1.100:8443` |
+| `dash`    | `yourdomain.com` | `http://192.168.1.100:3010` |
+| `status`  | `yourdomain.com` | `http://192.168.1.100:3001` |
+| `pihole`  | `yourdomain.com` | `http://192.168.1.100:8080` |
+| `yt`      | `yourdomain.com` | `http://192.168.1.100:5678` |
+| `tt`      | `yourdomain.com` | `http://192.168.1.100:5679` |
+| `ig`      | `yourdomain.com` | `http://192.168.1.100:5680` |
+| `x`       | `yourdomain.com` | `http://192.168.1.100:5681` |
 
 The dashboard automatically creates the CNAME records.
 
@@ -305,10 +305,10 @@ The tunnel routes subdomains to internal services via [cloudflared/config.yml](c
 
 ```yaml
 # Add above the catch-all rule at the bottom:
-  - hostname: newservice.yourdomain.com
-    service: http://host.docker.internal:PORT
-    originRequest:
-      connectTimeout: 10s
+- hostname: newservice.yourdomain.com
+  service: http://host.docker.internal:PORT
+  originRequest:
+    connectTimeout: 10s
 ```
 
 Then restart: `docker compose restart cloudflared`
@@ -418,23 +418,23 @@ Auth keys expire (unless set to "no expiry"). To rotate:
 
 **This stack opens ZERO host ports.** Both Tailscale and Cloudflared establish outbound-only encrypted tunnels.
 
-| Service | Protocol | Direction | Description |
-|---------|----------|-----------|-------------|
-| Tailscale | WireGuard (UDP 41641) | **Outbound** | Encrypted VPN tunnel |
-| Cloudflared | QUIC (UDP 7844) | **Outbound** | Encrypted web tunnel |
+| Service     | Protocol              | Direction    | Description          |
+| ----------- | --------------------- | ------------ | -------------------- |
+| Tailscale   | WireGuard (UDP 41641) | **Outbound** | Encrypted VPN tunnel |
+| Cloudflared | QUIC (UDP 7844)       | **Outbound** | Encrypted web tunnel |
 
 ## Coexistence with Other Stacks
 
-| Stack | Ports | Network | Access via Tailscale | Access via Cloudflare |
-|-------|-------|---------|---------------------|-----------------------|
-| pi_youtube_stack | 5433, 5678 | youtube_stack_net | ✅ subnet route | yt.domain.com |
-| pi_tiktok_stack | 5434, 5679 | tiktok_stack_net | ✅ subnet route | tt.domain.com |
-| pi_instagram_stack | 5435, 5680 | instagram_stack_net | ✅ subnet route | ig.domain.com |
-| pi_x_stack | 5436, 5681 | x_stack_net | ✅ subnet route | x.domain.com |
-| pi_hole_stack | 53, 8080 | pihole_net | ✅ subnet route | pihole.domain.com |
-| pi_command_center | 3001, 3010 | command_center_net | ✅ subnet route | dash/status.domain.com |
-| pi_nextcloud_stack | 80, 443, 5437, 8443 | nextcloud_net | ✅ subnet route | cloud.domain.com |
-| **pi_remote_access_stack** | **none** | **remote_access_net** | — | — |
+| Stack                      | Ports               | Network               | Access via Tailscale | Access via Cloudflare  |
+| -------------------------- | ------------------- | --------------------- | -------------------- | ---------------------- |
+| pi_youtube_stack           | 5433, 5678          | youtube_stack_net     | ✅ subnet route      | yt.domain.com          |
+| pi_tiktok_stack            | 5434, 5679          | tiktok_stack_net      | ✅ subnet route      | tt.domain.com          |
+| pi_instagram_stack         | 5435, 5680          | instagram_stack_net   | ✅ subnet route      | ig.domain.com          |
+| pi_x_stack                 | 5436, 5681          | x_stack_net           | ✅ subnet route      | x.domain.com           |
+| pi_hole_stack              | 53, 8080            | pihole_net            | ✅ subnet route      | pihole.domain.com      |
+| pi_command_center          | 3001, 3010          | command_center_net    | ✅ subnet route      | dash/status.domain.com |
+| pi_nextcloud_stack         | 80, 443, 5437, 8443 | nextcloud_net         | ✅ subnet route      | cloud.domain.com       |
+| **pi_remote_access_stack** | **none**            | **remote_access_net** | —                    | —                      |
 
 ## Security Considerations
 

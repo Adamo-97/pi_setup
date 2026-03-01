@@ -55,7 +55,11 @@ services:
       - net.ipv4.ip_forward=1
       - net.ipv6.conf.all.forwarding=1
     healthcheck:
-      test: ["CMD-SHELL", "tailscale status --json | grep -q '\"BackendState\":\"Running\"' || exit 1"]
+      test:
+        [
+          "CMD-SHELL",
+          'tailscale status --json | grep -q ''"BackendState":"Running"'' || exit 1',
+        ]
       interval: 30s
       timeout: 10s
       retries: 5
@@ -90,7 +94,11 @@ services:
       tailscale:
         condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "cloudflared tunnel info 2>&1 | grep -qiE 'connector|running' || exit 1"]
+      test:
+        [
+          "CMD-SHELL",
+          "cloudflared tunnel info 2>&1 | grep -qiE 'connector|running' || exit 1",
+        ]
       interval: 30s
       timeout: 10s
       retries: 5
