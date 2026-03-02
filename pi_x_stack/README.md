@@ -40,11 +40,12 @@ C4Container
     Person(user, "Content Creator")
 
     System_Boundary(pi, "Raspberry Pi 5") {
-        Container(n8n, "n8n", "Workflow Engine", "Orchestrates 8-step pipeline, port 5681")
+        Container(n8n, "n8n", "Workflow Engine", "Orchestrates 6-gate HITL pipeline, port 5681")
         Container(postgres, "PostgreSQL 16", "Database", "pgvector, RAG store, port 5436")
+        Container(redis, "Redis", "Cache", "Rate limiting + budget cache, port 6382")
         Container(pipeline, "Python Pipeline", "8 Steps", "Scrape → Write → Validate → Voice → Footage → Assemble → Publish → RAG")
-        Container(agents, "AI Agents", "Python", "WriterAgent, ValidatorAgent, ClipAgent")
-        Container(services, "Services", "Python", "Gemini, ElevenLabs, News, Video, Subtitles, Buffer, Mattermost")
+        Container(agents, "AI Agents", "Python", "PlannerAgent, WriterAgent, ValidatorAgent, ClipAgent")
+        Container(services, "Services", "Python", "Gemini, ElevenLabs, News, Video, Subtitles, Buffer, Mattermost, RateLimiter, BudgetReader")
     }
 
     Rel(user, n8n, "Manual trigger / Mattermost approval")
@@ -59,25 +60,71 @@ C4Container
 
 All four stacks run independently on the same Raspberry Pi 5:
 
-| Stack              | PostgreSQL | n8n      | Network             | Database      |
-| ------------------ | ---------- | -------- | ------------------- | ------------- |
-| pi_youtube_stack   | 5433       | 5678     | youtube_stack_net   | youtube_rag   |
-| pi_tiktok_stack    | 5434       | 5679     | tiktok_stack_net    | tiktok_rag    |
-| pi_instagram_stack | 5435       | 5680     | instagram_stack_net | instagram_rag |
-| **pi_x_stack**     | **5436**   | **5681** | **x_stack_net**     | **x_rag**     |
+| Stack              | PostgreSQL | n8n      | Redis    | Network             | Database      |
+| ------------------ | ---------- | -------- | -------- | ------------------- | ------------- |
+| pi_youtube_stack   | 5433       | 5678     | 6379     | youtube_stack_net   | youtube_rag   |
+| pi_tiktok_stack    | 5434       | 5679     | 6380     | tiktok_stack_net    | tiktok_rag    |
+| pi_instagram_stack | 5435       | 5680     | 6381     | instagram_stack_net | instagram_rag |
+| **pi_x_stack**     | **5436**   | **5681** | **6382** | **x_stack_net**     | **x_rag**     |
 
-## Pipeline Steps
+## Pipeline Steps (6-Gate Human-in-the-Loop)
+
+Every phase requires **explicit human approval** via Mattermost before proceeding. Nothing proceeds past any gate without your click.
 
 ```mermaid
-flowchart LR
-    S1["1. Scrape News\nRSS / Google / Reddit"] --> S2["2. Generate Script\nGemini AI + tweet caption"]
-    S2 --> S3["3. Validate Script\n7-criteria quality gate"]
-    S3 --> S4["4. Generate Voiceover\nElevenLabs Arabic TTS"]
-    S4 --> S5["5. Download Footage\nyt-dlp + local fallback"]
-    S5 --> S6["6. Assemble Video\nFFmpeg 1080×1920 + ASS"]
-    S6 --> S7["7. Publish to X\nMattermost → Buffer → X"]
-    S7 --> S8["8. Update RAG\nEmbeddings & feedback"]
+flowchart TD
+    START([🕐 Daily 11AM / Manual]) --> BUDGET[📊 Load budgets.json]
+    BUDGET --> PLAN[🧠 X Planner — RAWG + Breaking News]
+
+    PLAN --> GATE0{🔔 Gate 0 — Plan Review}
+    GATE0 -- ✅ Approve --> SCRAPE[📰 Scrape News]
+    GATE0 -- ❌ Reject --> R0[Reject + RAG]
+
+    SCRAPE --> GATE1{🔔 Gate 1 — Data Review}
+    GATE1 -- ✅ Approve --> SCRIPT[✍️ Writer Agent — X Thread Script]
+    GATE1 -- ❌ Reject --> R1[Reject]
+
+    SCRIPT --> VALIDATE[🔍 Validator Agent]
+    VALIDATE --> GATE2{🔔 Gate 2 — Script Review}
+    GATE2 -- ✅ Approve --> VOICE[🎙️ ElevenLabs TTS]
+    GATE2 -- ❌ Reject --> R2[Reject]
+
+    VOICE --> GATE3{🔔 Gate 3 — Audio Review}
+    GATE3 -- ✅ Approve --> FOOTAGE[📹 Download + Assemble]
+    GATE3 -- ❌ Reject --> R3[Reject]
+
+    FOOTAGE --> GATE4{🔔 Gate 4 — Video Review}
+    GATE4 -- ✅ Approve --> PUBLISH{🔔 Gate 5 — Final Publish + 📎 Thumbnail Upload}
+    GATE4 -- ❌ Reject --> R4[Reject]
+
+    PUBLISH -- ✅ + 🖼️ Thumbnail --> BUFFER[📤 Buffer → X]
+    BUFFER --> RAG[🧠 Update RAG]
+    PUBLISH -- ❌ --> R5[Reject]
+
+    SCRIPT -.-> REDIS[🔴 Redis Rate Limiter]
+    VOICE -.-> REDIS
+    FOOTAGE -.-> REDIS
+    PLAN -.-> REDIS
+
+    style GATE0 fill:#2196F3,color:#fff
+    style GATE1 fill:#2196F3,color:#fff
+    style GATE2 fill:#2196F3,color:#fff
+    style GATE3 fill:#2196F3,color:#fff
+    style GATE4 fill:#2196F3,color:#fff
+    style PUBLISH fill:#FF9800,color:#fff
+    style REDIS fill:#f44336,color:#fff
 ```
+
+### Approval Gates Summary
+
+| Gate       | Phase   | What You Review                                                  |
+| ---------- | ------- | ---------------------------------------------------------------- |
+| **Gate 0** | Plan    | Planner Agent's content plan (game, hot take angle)              |
+| **Gate 1** | Data    | Scraped news articles (relevance, controversy level)             |
+| **Gate 2** | Script  | AI-generated Arabic script + tweet caption + validation scores   |
+| **Gate 3** | Audio   | ElevenLabs voiceover + word timestamps                           |
+| **Gate 4** | Video   | Assembled 9:16 video with subtitles                              |
+| **Gate 5** | Publish | Final review + **manual thumbnail upload** via Mattermost thread |
 
 ## Content Types
 
@@ -123,7 +170,8 @@ python -m pipeline.step1_scrape_news
 ```
 pi_x_stack/
 ├── config/
-│   ├── settings.py              # Central configuration
+│   ├── settings.py              # Central config + RedisConfig, BudgetConfig, SharedRAWGConfig
+│   ├── budgets.json             # Per-platform weekly budget quotas
 │   └── prompts/
 │       ├── writer_prompts.py    # Arabic script generation prompts
 │       └── validator_prompts.py # 7-criteria validation prompts
@@ -140,10 +188,13 @@ pi_x_stack/
 │   ├── video_downloader.py      # yt-dlp + local footage
 │   ├── subtitle_service.py      # ASS karaoke subtitles
 │   ├── video_assembler.py       # FFmpeg video assembly
-│   ├── mattermost_service.py    # Mattermost approval webhooks
+│   ├── mattermost_service.py    # 6-gate HITL approval messages via Mattermost
 │   └── buffer_service.py        # Buffer X/Twitter publishing
+│   ├── redis_rate_limiter.py    # Redis-backed budget enforcement (7-day TTL)
+│   └── budget_reader.py         # Loads budgets.json from Nextcloud/Redis/local
 ├── agents/
 │   ├── base_agent.py            # Abstract agent base class
+│   ├── planner_agent.py         # Content planner — RAWG cache + breaking news (Gate 0)
 │   ├── writer_agent.py          # AI script writer
 │   ├── validator_agent.py       # AI quality validator
 │   └── clip_agent.py            # AI footage selector
@@ -189,12 +240,18 @@ See [.env.example](.env.example) for all required keys:
 - `MATTERMOST_URL` — Self-hosted Mattermost server URL
 - `MATTERMOST_BOT_TOKEN` — Personal Access Token for bot-x
 - `MATTERMOST_CHANNEL_ID` — Channel ID for #pipeline-x
+- `REDIS_URL` — Redis connection (redis://redis_x:6382/0)
+- `NEXTCLOUD_URL` — Nextcloud WebDAV base URL
+- `NEXTCLOUD_USER` / `NEXTCLOUD_PASSWORD` — Nextcloud credentials
+- `SHARED_RAWG_HOST` / `SHARED_RAWG_PORT` — Shared RAWG database for planner
 - `POSTGRES_*` — Database configuration
 
 ## Schedule
 
-- **Automatic**: Daily at 9:00 AM via n8n schedule trigger
+- **Automatic**: Daily at 11:00 AM via n8n schedule trigger
 - **Manual**: POST to `http://<pi-ip>:5681/webhook/x-manual`
+- **Approve**: POST to `http://<pi-ip>:5681/webhook/x-approve?gate=N&run_id=...&action=approve`
+- **Reject**: POST to `http://<pi-ip>:5681/webhook/x-reject?gate=N&run_id=...&action=reject`
 
 ## License
 

@@ -76,17 +76,57 @@ C4Container
 
 ---
 
-## Pipeline Flow
+## Pipeline Flow (6-Gate Human-in-the-Loop)
+
+Every phase requires **explicit human approval** via Mattermost before proceeding. Nothing is automated past any gate without your click.
 
 ```mermaid
-flowchart LR
-    S1["1. Fetch Game Data"] -->|"RAWG API → local DB"| S2["2. Generate Script"]
-    S2 -->|"Writer Agent (Gemini) + RAG"| S3["3. Validate Script"]
-    S3 -->|"Validator Agent (Gemini)"| S4["4. Generate Metadata"]
-    S4 -->|"Metadata Agent (SEO)"| S5["5. Generate Voiceover"]
-    S5 -->|"ElevenLabs TTS"| S6["6. Update RAG"]
-    S3 --> MMA["Mattermost Step 1\nApproval"]
-    S5 --> MMB["Mattermost Step 2\nApproval"]
+flowchart TD
+    START([🕐 Schedule / Manual Trigger]) --> BUDGET[📊 Load budgets.json from Nextcloud]
+    BUDGET --> PLAN[🧠 Planner Agent — RAWG Cache + RAG]
+
+    PLAN --> GATE0{🔔 Gate 0 — Plan Review}
+    GATE0 -- ✅ Approve --> FETCH[📥 Fetch Game Data — RAWG API]
+    GATE0 -- ❌ Reject --> R0[📝 Store Rejection in RAG]
+
+    FETCH --> GATE1{🔔 Gate 1 — Data Review}
+    GATE1 -- ✅ Approve --> SCRIPT[✍️ Writer Agent — Gemini → Arabic Script]
+    GATE1 -- ❌ Reject --> R1[📝 Reject + Notify]
+
+    SCRIPT --> VALIDATE[🔍 Validator Agent — AI Quality Check]
+    VALIDATE --> GATE2{🔔 Gate 2 — Script + Validation Review}
+    GATE2 -- ✅ Approve --> META[🏷️ Metadata Agent — SEO Titles/Tags]
+    GATE2 -- ❌ Reject --> R2[📝 Reject + Notify]
+
+    META --> GATE3{🔔 Gate 3 — Metadata Review}
+    GATE3 -- ✅ Approve --> VOICE[🎙️ ElevenLabs TTS — Arabic Voiceover]
+    GATE3 -- ❌ Reject --> R3[📝 Reject + Notify]
+
+    VOICE --> GATE4{🔔 Gate 4 — Audio Review}
+    GATE4 -- ✅ Approve --> PUBLISH{🔔 Gate 5 — Final Publish + 📎 Thumbnail Upload}
+    GATE4 -- ❌ Reject --> R4[📝 Reject + Re-generate]
+
+    PUBLISH -- ✅ Approve + 🖼️ Thumbnail --> RAG[🧠 Update RAG + Completion Notification]
+    PUBLISH -- ❌ Reject --> R5[📝 Reject + Notify]
+
+    subgraph REDIS[🔴 Redis Rate Limiter]
+        direction LR
+        CHECK[Budget Check] --> ALLOW[✅ Allow]
+        CHECK --> DENY[❌ Deny → Halt]
+    end
+
+    SCRIPT -.-> REDIS
+    META -.-> REDIS
+    VOICE -.-> REDIS
+    PLAN -.-> REDIS
+
+    style GATE0 fill:#2196F3,color:#fff
+    style GATE1 fill:#2196F3,color:#fff
+    style GATE2 fill:#2196F3,color:#fff
+    style GATE3 fill:#2196F3,color:#fff
+    style GATE4 fill:#2196F3,color:#fff
+    style PUBLISH fill:#FF9800,color:#fff
+    style REDIS fill:#f44336,color:#fff
 ```
 
 ---
@@ -252,7 +292,8 @@ pi_youtube_stack/
 │
 ├── config/                          # --- Configuration ---
 │   ├── __init__.py
-│   ├── settings.py                  # Env var loading, content-type registry
+│   ├── settings.py                  # Env var loading, RedisConfig, BudgetConfig, SharedRAWGConfig
+│   ├── budgets.json                 # Per-platform weekly budget quotas (synced from Nextcloud)
 │   └── prompts/
 │       ├── __init__.py
 │       ├── writer_prompts.py        # Arabic writer system prompt + 3 templates
@@ -271,12 +312,15 @@ pi_youtube_stack/
 │   ├── gemini_service.py            # generate_text / generate_json / generate_embedding
 │   ├── elevenlabs_service.py        # TTS streaming → PCM → WAV conversion
 │   ├── rawg_service.py              # RAWG REST client + DB UPSERT
-│   ├── mattermost_service.py        # Mattermost approval messages, approve/reject buttons
-│   └── embedding_service.py         # Thin convenience layer over GeminiService
+│   ├── mattermost_service.py        # 6-gate HITL approval messages via Mattermost
+│   ├── embedding_service.py         # Thin convenience layer over GeminiService
+│   ├── redis_rate_limiter.py        # Redis-backed budget enforcement (7-day TTL)
+│   └── budget_reader.py             # Loads budgets.json from Nextcloud/Redis/local
 │
 ├── agents/                          # --- AI Agent System ---
 │   ├── __init__.py
 │   ├── base_agent.py                # ABC with RAG helpers, duration estimator, run logger
+│   ├── planner_agent.py             # Content planner — RAWG cache + RAG context (Gate 0)
 │   ├── writer_agent.py              # Generates Arabic YouTube scripts (Gemini)
 │   ├── validator_agent.py           # Scores scripts (8 criteria), threshold = 70
 │   └── metadata_agent.py            # Titles, description, tags, game info cards
@@ -308,34 +352,34 @@ pi_youtube_stack/
 
 ---
 
-## Approval Flow (Mattermost)
+## Approval Flow (6-Gate HITL via Mattermost)
 
-The pipeline uses a **two-step human-in-the-loop** approval via Mattermost:
+The pipeline uses **6 mandatory human-in-the-loop gates** via Mattermost. n8n pauses at each gate and posts an approval request to `#pipeline-youtube`. Nothing proceeds without your explicit approval.
 
-```mermaid
-flowchart TD
-    V["Validator passes\n(score ≥ 70)"] --> S1["Mattermost: Script Preview\n+ Approve / Reject"]
-    S1 -->|"Human reviews\nArabic text quality"| A1{"Approved?"}
-    A1 -->|Yes| TTS["ElevenLabs generates\n.wav voiceover"]
-    A1 -->|No| RAG1["Feedback → RAG DB"]
-    TTS --> S2["Mattermost: Audio Details\n+ Approve / Reject"]
-    S2 -->|"Human listens &\nconfirms tone"| A2{"Approved?"}
-    A2 -->|Yes| Done["Pipeline continues"]
-    A2 -->|No| RAG2["Feedback → RAG DB"]
-```
+| Gate       | Phase    | What You Review                                                        |
+| ---------- | -------- | ---------------------------------------------------------------------- |
+| **Gate 0** | Plan     | Planner Agent's content plan (game, angle, approach)                   |
+| **Gate 1** | Data     | Fetched RAWG game data (accuracy, relevance)                           |
+| **Gate 2** | Script   | AI-generated Arabic script + validation scores                         |
+| **Gate 3** | Metadata | SEO titles, tags, description, game info                               |
+| **Gate 4** | Audio    | ElevenLabs voiceover WAV (listen & confirm tone)                       |
+| **Gate 5** | Publish  | Final review + **manual thumbnail upload** via Mattermost thread reply |
 
-Rejection feedback is automatically stored in the RAG database so the Writer Agent learns from mistakes.
+**Rejection** at any gate stores feedback in the RAG database so agents learn from mistakes. The pipeline halts and notifies you — no silent failures.
+
+**Thumbnail Upload (Gate 5):** Reply to the Gate 5 Mattermost message with your thumbnail image attached. The n8n webhook extracts the file from the thread and includes it in the publish payload.
 
 ---
 
 ## Docker Services
 
-| Service            | Image                    | Port | Memory Limit |
-| ------------------ | ------------------------ | ---- | ------------ |
-| `postgres_youtube` | `pgvector/pgvector:pg16` | 5433 | 512 MB       |
-| `n8n_youtube`      | `n8nio/n8n:latest`       | 5678 | 512 MB       |
+| Service            | Image                    | Port | Memory Limit | Purpose                      |
+| ------------------ | ------------------------ | ---- | ------------ | ---------------------------- |
+| `postgres_youtube` | `pgvector/pgvector:pg16` | 5433 | 512 MB       | Database + vector embeddings |
+| `n8n_youtube`      | `n8nio/n8n:latest`       | 5678 | 512 MB       | Workflow orchestration       |
+| `redis_youtube`    | `redis:7-alpine`         | 6379 | 64 MB        | Rate limiting + budget cache |
 
-Both run on an isolated Docker bridge network `youtube_stack_net`.
+All run on an isolated Docker bridge network `youtube_stack_net`.
 
 ```bash
 # Start
@@ -398,23 +442,36 @@ docker-compose down -v && docker-compose up -d
 
 ## Environment Variables
 
-| Variable                | Default                         | Description                           |
-| ----------------------- | ------------------------------- | ------------------------------------- |
-| `GEMINI_API_KEY`        | —                               | Google Gemini API key                 |
-| `GEMINI_MODEL`          | `gemini-2.5-pro`                | Gemini model name                     |
-| `ELEVENLABS_API_KEY`    | —                               | ElevenLabs API key                    |
-| `ELEVENLABS_VOICE_ID`   | —                               | Cloned voice ID                       |
-| `ELEVENLABS_MODEL`      | `eleven_multilingual_v2`        | TTS model                             |
-| `RAWG_API_KEY`          | —                               | RAWG.io API key                       |
-| `MATTERMOST_URL`        | —                               | Self-hosted Mattermost server URL     |
-| `MATTERMOST_BOT_TOKEN`  | —                               | Personal Access Token for bot-youtube |
-| `MATTERMOST_CHANNEL_ID` | —                               | Channel ID for #pipeline-youtube      |
-| `DB_HOST`               | `localhost`                     | PostgreSQL host                       |
-| `DB_PORT`               | `5433`                          | PostgreSQL port                       |
-| `DB_NAME`               | `youtube_rag`                   | Database name                         |
-| `DB_USER`               | `yt_user`                       | Database user                         |
-| `DB_PASSWORD`           | `yt_secure_pass_2025`           | Database password                     |
-| `N8N_WEBHOOK_BASE`      | `http://localhost:5678/webhook` | n8n webhook base URL                  |
+| Variable                 | Default                         | Description                           |
+| ------------------------ | ------------------------------- | ------------------------------------- |
+| `GEMINI_API_KEY`         | —                               | Google Gemini API key                 |
+| `GEMINI_MODEL`           | `gemini-2.5-pro`                | Gemini model name                     |
+| `ELEVENLABS_API_KEY`     | —                               | ElevenLabs API key                    |
+| `ELEVENLABS_VOICE_ID`    | —                               | Cloned voice ID                       |
+| `ELEVENLABS_MODEL`       | `eleven_multilingual_v2`        | TTS model                             |
+| `RAWG_API_KEY`           | —                               | RAWG.io API key                       |
+| `MATTERMOST_URL`         | —                               | Self-hosted Mattermost server URL     |
+| `MATTERMOST_BOT_TOKEN`   | —                               | Personal Access Token for bot-youtube |
+| `MATTERMOST_CHANNEL_ID`  | —                               | Channel ID for #pipeline-youtube      |
+| `DB_HOST`                | `localhost`                     | PostgreSQL host                       |
+| `DB_PORT`                | `5433`                          | PostgreSQL port                       |
+| `DB_NAME`                | `youtube_rag`                   | Database name                         |
+| `DB_USER`                | `yt_user`                       | Database user                         |
+| `DB_PASSWORD`            | `yt_secure_pass_2025`           | Database password                     |
+| `N8N_WEBHOOK_BASE`       | `http://localhost:5678/webhook` | n8n webhook base URL                  |
+| `REDIS_URL`              | `redis://redis_youtube:6379/0`  | Redis connection URL                  |
+| `REDIS_MAX_MEMORY`       | `64mb`                          | Redis max memory                      |
+| `REDIS_BUDGET_TTL`       | `604800`                        | Budget key TTL (7 days)               |
+| `NEXTCLOUD_URL`          | —                               | Nextcloud WebDAV base URL             |
+| `NEXTCLOUD_USER`         | —                               | Nextcloud username                    |
+| `NEXTCLOUD_PASSWORD`     | —                               | Nextcloud password                    |
+| `NEXTCLOUD_BUDGETS_PATH` | `budgets.json`                  | Path to budgets.json in Nextcloud     |
+| `BUDGET_CACHE_TTL`       | `3600`                          | Budget config cache TTL (1 hour)      |
+| `SHARED_RAWG_HOST`       | `postgres_youtube`              | Shared RAWG database host             |
+| `SHARED_RAWG_PORT`       | `5433`                          | Shared RAWG database port             |
+| `SHARED_RAWG_DB`         | `youtube_rag`                   | Shared RAWG database name             |
+| `SHARED_RAWG_USER`       | `yt_readonly`                   | Read-only user for cross-stack access |
+| `SHARED_RAWG_PASSWORD`   | —                               | Shared RAWG user password             |
 
 ---
 

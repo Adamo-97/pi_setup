@@ -78,20 +78,64 @@ C4Container
 
 ---
 
-## Pipeline Flow
+## Pipeline Flow (6-Gate Human-in-the-Loop)
+
+Every phase requires **explicit human approval** via Mattermost before proceeding. Nothing proceeds past any gate without your click.
 
 ```mermaid
-flowchart LR
-    S1["Step 1\nScrape News\nRSS/Google/Reddit"] --> S2["Step 2\nGenerate Script\n(Gemini)"]
-    S2 --> S3["Step 3\nValidate Script\n(AI Gate)"]
-    S3 --> S4["Step 4\nGenerate Voiceover\n(ElevenLabs)"]
-    S4 --> S5["Step 5\nDownload Footage\n(yt-dlp)"]
-    S5 --> S6["Step 6\nAssemble Video\n(FFmpeg)"]
-    S6 --> S7["Step 7\nPublish\n(Buffer → Instagram)"]
-    S7 --> S8["Step 8\nUpdate RAG\n(Embeddings)"]
-    S3 -- "❌ Reject\nAuto-revise (2x)" --> S2
-    S7 --> MM["Mattermost Approval\n✅ / ❌"]
+flowchart TD
+    START([🕐 Daily 10AM / Manual]) --> BUDGET[📊 Load budgets.json]
+    BUDGET --> PLAN[🧠 Instagram Planner — RAWG + Visual Trends]
+
+    PLAN --> GATE0{🔔 Gate 0 — Plan Review}
+    GATE0 -- ✅ Approve --> SCRAPE[📰 Scrape News]
+    GATE0 -- ❌ Reject --> R0[Reject + RAG]
+
+    SCRAPE --> GATE1{🔔 Gate 1 — Data Review}
+    GATE1 -- ✅ Approve --> SCRIPT[✍️ Writer Agent — Reels Script]
+    GATE1 -- ❌ Reject --> R1[Reject]
+
+    SCRIPT --> VALIDATE[🔍 Validator Agent]
+    VALIDATE --> GATE2{🔔 Gate 2 — Script Review}
+    GATE2 -- ✅ Approve --> VOICE[🎙️ ElevenLabs TTS]
+    GATE2 -- ❌ Reject --> R2[Reject]
+
+    VOICE --> GATE3{🔔 Gate 3 — Audio Review}
+    GATE3 -- ✅ Approve --> FOOTAGE[📹 Download + Assemble]
+    GATE3 -- ❌ Reject --> R3[Reject]
+
+    FOOTAGE --> GATE4{🔔 Gate 4 — Video Review}
+    GATE4 -- ✅ Approve --> PUBLISH{🔔 Gate 5 — Final Publish + 📎 Thumbnail Upload}
+    GATE4 -- ❌ Reject --> R4[Reject]
+
+    PUBLISH -- ✅ + 🖼️ Thumbnail --> BUFFER[📤 Buffer → Instagram]
+    BUFFER --> RAG[🧠 Update RAG]
+    PUBLISH -- ❌ --> R5[Reject]
+
+    SCRIPT -.-> REDIS[🔴 Redis Rate Limiter]
+    VOICE -.-> REDIS
+    FOOTAGE -.-> REDIS
+    PLAN -.-> REDIS
+
+    style GATE0 fill:#2196F3,color:#fff
+    style GATE1 fill:#2196F3,color:#fff
+    style GATE2 fill:#2196F3,color:#fff
+    style GATE3 fill:#2196F3,color:#fff
+    style GATE4 fill:#2196F3,color:#fff
+    style PUBLISH fill:#FF9800,color:#fff
+    style REDIS fill:#f44336,color:#fff
 ```
+
+### Approval Gates Summary
+
+| Gate       | Phase   | What You Review                                                  |
+| ---------- | ------- | ---------------------------------------------------------------- |
+| **Gate 0** | Plan    | Planner Agent's content plan (game, visual angle)                |
+| **Gate 1** | Data    | Scraped news articles (relevance, quality)                       |
+| **Gate 2** | Script  | AI-generated Arabic Reels script + validation scores             |
+| **Gate 3** | Audio   | ElevenLabs voiceover + word timestamps                           |
+| **Gate 4** | Video   | Assembled 9:16 Reel with subtitles                               |
+| **Gate 5** | Publish | Final review + **manual thumbnail upload** via Mattermost thread |
 
 ---
 
@@ -184,8 +228,9 @@ docker compose up -d
 pi_instagram_stack/
 ├── config/
 │   ├── __init__.py
-│   ├── settings.py              # Centralized configuration (dataclasses)
+│   ├── settings.py              # Centralized config + RedisConfig, BudgetConfig, SharedRAWGConfig
 │   └── prompts/
+│       ├── budgets.json             # Per-platform weekly budget quotas
 │       ├── __init__.py
 │       ├── writer_prompts.py    # Arabic Instagram Reels script templates
 │       └── validator_prompts.py # 7-criteria quality gate prompts
@@ -204,11 +249,14 @@ pi_instagram_stack/
 │   ├── video_downloader.py      # yt-dlp + local fallback
 │   ├── subtitle_service.py      # ASS subtitle generation (word-by-word)
 │   ├── video_assembler.py       # FFmpeg vertical video assembly
-│   ├── mattermost_service.py    # Mattermost approval messages
+│   ├── mattermost_service.py    # 6-gate HITL approval messages via Mattermost
 │   └── buffer_service.py        # Buffer API → Instagram Reels publishing
+│   ├── redis_rate_limiter.py    # Redis-backed budget enforcement (7-day TTL)
+│   └── budget_reader.py         # Loads budgets.json from Nextcloud/Redis/local
 ├── agents/
 │   ├── __init__.py
 │   ├── base_agent.py            # Abstract base with RAG helpers
+│   ├── planner_agent.py         # Content planner — RAWG cache + visual trends (Gate 0)
 │   ├── writer_agent.py          # Arabic script generation
 │   ├── validator_agent.py       # 7-criteria quality validation
 │   └── clip_agent.py            # AI footage selection
@@ -237,12 +285,13 @@ pi_instagram_stack/
 
 ## Docker Services
 
-| Service              | Image                    | Port   | Purpose                      |
-| -------------------- | ------------------------ | ------ | ---------------------------- |
-| `postgres_instagram` | `pgvector/pgvector:pg16` | `5435` | Database + vector embeddings |
-| `n8n_instagram`      | `n8nio/n8n:latest`       | `5680` | Workflow orchestration       |
+| Service              | Image                    | Port   | Memory | Purpose                      |
+| -------------------- | ------------------------ | ------ | ------ | ---------------------------- |
+| `postgres_instagram` | `pgvector/pgvector:pg16` | `5435` | 512 MB | Database + vector embeddings |
+| `n8n_instagram`      | `n8nio/n8n:latest`       | `5680` | 512 MB | Workflow orchestration       |
+| `redis_instagram`    | `redis:7-alpine`         | `6381` | 64 MB  | Rate limiting + budget cache |
 
-Both containers are limited to **512MB RAM** for Pi 5 optimization.
+All containers run on an isolated Docker bridge network `instagram_stack_net`.
 
 > **Note:** These ports are isolated from `pi_youtube_stack` (5433/5678) and `pi_tiktok_stack` (5434/5679) so all three stacks can run simultaneously.
 
@@ -348,12 +397,14 @@ python -m pipeline.step8_update_rag --video-id <UUID>
 
 Import `n8n_workflow.json` into n8n at `http://<pi-ip>:5680`.
 
+The workflow implements the **6-Gate HITL** pattern: a single approve/reject webhook pair routes approvals to the correct gate via a Switch node.
+
 **Triggers:**
 
-- **Schedule**: Daily at 9:00 AM (trending_news)
+- **Schedule**: Daily at 10:00 AM (trending_news)
 - **Webhook**: `POST /webhook/instagram-manual` (manual trigger)
-- **Webhook**: `GET /webhook/instagram-approve` (Mattermost approve callback)
-- **Webhook**: `GET /webhook/instagram-reject` (Mattermost reject callback)
+- **Webhook**: `POST /webhook/instagram-approve?gate=N&run_id=...&action=approve` (gate approval)
+- **Webhook**: `POST /webhook/instagram-reject?gate=N&run_id=...&action=reject` (gate rejection)
 
 ---
 
