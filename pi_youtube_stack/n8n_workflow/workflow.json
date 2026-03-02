@@ -1,23 +1,17 @@
 {
-  "name": "YouTube Content Pipeline",
+  "name": "YouTube Content Pipeline (6-Gate HITL)",
   "nodes": [
     {
       "parameters": {
         "rule": {
-          "interval": [
-            {
-              "triggerAtDay": 25,
-              "triggerAtHour": 10
-            }
-          ]
+          "interval": [{ "triggerAtDay": 25, "triggerAtHour": 10 }]
         }
       },
       "id": "schedule-monthly",
       "name": "Monthly Schedule (25th)",
       "type": "n8n-nodes-base.scheduleTrigger",
       "typeVersion": 1.2,
-      "position": [200, 200],
-      "notes": "Triggers on the 25th of every month at 10:00 AM for monthly_releases content."
+      "position": [200, 200]
     },
     {
       "parameters": {
@@ -31,12 +25,11 @@
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2,
       "position": [200, 500],
-      "webhookId": "trigger-pipeline",
-      "notes": "POST /webhook/trigger-pipeline with JSON body: {\"content_type\": \"...\", \"year\": 2025, \"month\": 1, \"game_slug\": \"...\"}"
+      "webhookId": "trigger-pipeline"
     },
     {
       "parameters": {
-        "jsCode": "// Merge scheduled and manual triggers into a unified format\nconst input = $input.first().json;\n\nlet contentType, year, month, gameSlug, triggerSource;\n\nif ($('Monthly Schedule (25th)').isExecuted) {\n  const now = new Date();\n  contentType = 'monthly_releases';\n  year = now.getFullYear();\n  month = now.getMonth() + 1;\n  gameSlug = '';\n  triggerSource = 'schedule';\n} else {\n  contentType = input.content_type || 'monthly_releases';\n  year = input.year || new Date().getFullYear();\n  month = input.month || new Date().getMonth() + 1;\n  gameSlug = input.game_slug || '';\n  triggerSource = 'manual';\n}\n\nreturn [{\n  json: {\n    content_type: contentType,\n    year: year,\n    month: month,\n    game_slug: gameSlug,\n    trigger_source: triggerSource\n  }\n}];"
+        "jsCode": "const input = $input.first().json;\nconst runId = require('crypto').randomUUID();\nlet contentType, year, month, gameSlug, triggerSource;\nif ($('Monthly Schedule (25th)').isExecuted) {\n  const now = new Date();\n  contentType = 'monthly_releases'; year = now.getFullYear();\n  month = now.getMonth() + 1; gameSlug = ''; triggerSource = 'schedule';\n} else {\n  contentType = input.content_type || 'monthly_releases';\n  year = input.year || new Date().getFullYear();\n  month = input.month || new Date().getMonth() + 1;\n  gameSlug = input.game_slug || ''; triggerSource = 'manual';\n}\nreturn [{ json: { content_type: contentType, year, month, game_slug: gameSlug, trigger_source: triggerSource, run_id: runId } }];"
       },
       "id": "normalize-input",
       "name": "Normalize Input",
@@ -46,224 +39,301 @@
     },
     {
       "parameters": {
-        "command": "={{ 'cd /home/node/project && /home/node/project/.venv/bin/python3 scripts/fetch_game_data.py --type ' + $json.content_type + ' --year ' + $json.year + ' --month ' + $json.month + ($json.game_slug ? ' --game-slug ' + $json.game_slug : '') }}"
+        "command": "={{ 'cd /home/node/project && .venv/bin/python3 -c \"from agents.planner_agent import PlannerAgent; import json; p = PlannerAgent(); r = p.execute(); print(json.dumps(r))\"' }}"
       },
-      "id": "fetch-games",
-      "name": "1. Fetch Game Data",
+      "id": "step0-plan",
+      "name": "0. Generate Plan",
       "type": "n8n-nodes-base.executeCommand",
       "typeVersion": 1,
       "position": [700, 350],
-      "notes": "Calls RAWG API, stores games in local DB, returns JSON summary."
+      "notes": "PlannerAgent queries RAWG cache + RAG, proposes content idea."
     },
     {
       "parameters": {
-        "jsCode": "const output = $input.first().json;\nlet result;\n\ntry {\n  // stdout holds our JSON\n  result = JSON.parse(output.stdout);\n} catch (e) {\n  throw new Error('Failed to parse fetch_game_data output: ' + output.stdout);\n}\n\nif (!result.success) {\n  throw new Error('Fetch game data failed: ' + JSON.stringify(result));\n}\n\nreturn [{ json: { ...result, ...$('Normalize Input').first().json } }];"
+        "jsCode": "const stdout = $input.first().json.stdout || '';\nconst lines = stdout.trim().split('\\n');\ntry { const plan = JSON.parse(lines[lines.length - 1]);\n  return [{ json: { ...plan, run_id: $('Normalize Input').first().json.run_id } }];\n} catch (e) { throw new Error('Parse plan failed: ' + lines[lines.length - 1]); }"
       },
-      "id": "parse-fetch",
-      "name": "Parse Fetch Result",
+      "id": "parse-plan",
+      "name": "Parse Plan",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [950, 350]
     },
     {
       "parameters": {
-        "command": "={{ 'cd /home/node/project && /home/node/project/.venv/bin/python3 scripts/generate_script.py --type ' + $json.content_type + ' --year ' + $json.year + ' --month ' + $json.month + ($json.game_slug ? ' --game-slug ' + $json.game_slug : '') + ' --trigger ' + $json.trigger_source }}"
+        "command": "={{ 'cd /home/node/project && .venv/bin/python3 -c \"from services.mattermost_service import MattermostService; mm = MattermostService(); mm.send_gate_approval(0, \\\"خطة محتوى جديدة للمراجعة\\\", {\\\"الموضوع\\\": \\\"' + ($json.proposed_topic || '').replace(/\"/g, '') + '\\\", \\\"النوع\\\": \\\"' + ($json.proposed_content_type || '') + '\\\", \\\"التكلفة\\\": \\\"' + ($json.estimated_cost_units || 0) + ' وحدة\\\"}, \\\"' + $json.run_id + '\\\", budget_status=\\\"' + ($json.budget_status || '') + '\\\")\"' }}"
       },
-      "id": "generate-script",
-      "name": "2. Generate Script",
+      "id": "gate0-notify",
+      "name": "Gate 0: Plan Approval",
       "type": "n8n-nodes-base.executeCommand",
       "typeVersion": 1,
       "position": [1200, 350],
-      "notes": "Writer Agent generates Arabic YouTube script via Gemini."
+      "notes": "Pipeline PAUSES — waiting for human approval of plan."
     },
     {
       "parameters": {
-        "jsCode": "const output = $input.first().json;\nlet result;\n\ntry {\n  result = JSON.parse(output.stdout);\n} catch (e) {\n  throw new Error('Failed to parse generate_script output: ' + output.stdout);\n}\n\nif (!result.success) {\n  throw new Error('Script generation failed: ' + JSON.stringify(result));\n}\n\nreturn [{ json: result }];"
-      },
-      "id": "parse-script",
-      "name": "Parse Script Result",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [1450, 350]
-    },
-    {
-      "parameters": {
-        "command": "={{ 'cd /home/node/project && /home/node/project/.venv/bin/python3 scripts/validate_script.py --script-id ' + $json.script_id }}"
-      },
-      "id": "validate-script",
-      "name": "3. Validate Script",
-      "type": "n8n-nodes-base.executeCommand",
-      "typeVersion": 1,
-      "position": [1700, 350],
-      "notes": "Validator Agent reviews the script. If approved, sends Slack Step 1 approval request."
-    },
-    {
-      "parameters": {
-        "jsCode": "const output = $input.first().json;\nlet result;\n\ntry {\n  result = JSON.parse(output.stdout);\n} catch (e) {\n  throw new Error('Failed to parse validate_script output: ' + output.stdout);\n}\n\nreturn [{ json: result }];"
-      },
-      "id": "parse-validation",
-      "name": "Parse Validation",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [1950, 350]
-    },
-    {
-      "parameters": {
-        "conditions": {
-          "options": {
-            "caseSensitive": true,
-            "leftValue": "",
-            "typeValidation": "strict"
-          },
-          "conditions": [
-            {
-              "id": "approved-check",
-              "leftValue": "={{ $json.approved }}",
-              "rightValue": true,
-              "operator": {
-                "type": "boolean",
-                "operation": "equals"
-              }
-            }
-          ],
-          "combinator": "and"
-        },
-        "options": {}
-      },
-      "id": "check-approved",
-      "name": "Approved?",
-      "type": "n8n-nodes-base.if",
-      "typeVersion": 2.2,
-      "position": [2200, 350]
-    },
-    {
-      "parameters": {
-        "command": "={{ 'cd /home/node/project && /home/node/project/.venv/bin/python3 scripts/generate_metadata.py --script-id ' + $json.script_id }}"
-      },
-      "id": "generate-metadata",
-      "name": "4. Generate Metadata",
-      "type": "n8n-nodes-base.executeCommand",
-      "typeVersion": 1,
-      "position": [2500, 200],
-      "notes": "Metadata Agent generates titles, description, tags, hashtags, game info cards."
-    },
-    {
-      "parameters": {
-        "command": "={{ 'cd /home/node/project && /home/node/project/.venv/bin/python3 scripts/generate_voiceover.py --script-id ' + $json.script_id }}"
-      },
-      "id": "generate-voiceover",
-      "name": "5. Generate Voiceover",
-      "type": "n8n-nodes-base.executeCommand",
-      "typeVersion": 1,
-      "position": [2500, 500],
-      "notes": "ElevenLabs TTS. Sends Slack Step 2 approval for audio review."
-    },
-    {
-      "parameters": {
-        "jsCode": "const metaOut = $('4. Generate Metadata').first().json;\nconst audioOut = $('5. Generate Voiceover').first().json;\n\nlet metaResult, audioResult;\n\ntry {\n  metaResult = JSON.parse(metaOut.stdout);\n} catch { metaResult = { error: 'parse_failed' }; }\n\ntry {\n  audioResult = JSON.parse(audioOut.stdout);\n} catch { audioResult = { error: 'parse_failed' }; }\n\nreturn [{\n  json: {\n    metadata: metaResult,\n    voiceover: audioResult,\n    pipeline_status: 'awaiting_human_approval',\n    message: 'Pipeline complete. Awaiting Slack approvals.'\n  }\n}];"
-      },
-      "id": "merge-results",
-      "name": "Merge Results",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [2800, 350]
-    },
-    {
-      "parameters": {
-        "command": "={{ 'cd /home/node/project && /home/node/project/.venv/bin/python3 scripts/update_rag.py' }}"
-      },
-      "id": "update-rag",
-      "name": "6. Update RAG",
-      "type": "n8n-nodes-base.executeCommand",
-      "typeVersion": 1,
-      "position": [3050, 350],
-      "notes": "Process pending feedback into RAG vector store."
-    },
-    {
-      "parameters": {
-        "command": "echo '{\"success\": true, \"message\": \"Script rejected by validator. Check logs.\", \"script_id\": \"{{ $json.script_id }}\", \"score\": {{ $json.overall_score || 0 }} }'"
-      },
-      "id": "handle-rejection",
-      "name": "Handle Rejection",
-      "type": "n8n-nodes-base.executeCommand",
-      "typeVersion": 1,
-      "position": [2500, 600],
-      "notes": "Script did not meet the approval threshold. Notification already sent by validate_script.py."
-    },
-    {
-      "parameters": {
-        "httpMethod": "POST",
-        "path": "slack-approval",
+        "httpMethod": "GET",
+        "path": "youtube-approve",
         "responseMode": "lastNode",
         "options": {}
       },
-      "id": "webhook-slack-approval",
-      "name": "Slack Approval Callback",
+      "id": "webhook-approve",
+      "name": "Approval Webhook",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2,
       "position": [200, 900],
-      "webhookId": "slack-approval",
-      "notes": "Receives Slack button callbacks for script/audio approval or rejection."
+      "webhookId": "youtube-approve",
+      "notes": "Single endpoint for ALL gate approvals. ?gate=N&run_id=...&action=approve"
     },
     {
       "parameters": {
-        "jsCode": "// Parse Slack approval callback\nconst body = $input.first().json.body;\n\n// Extract action from button value or query params\nconst scriptId = body.script_id || '';\nconst action = body.action || '';           // 'approve' or 'reject'\nconst step = body.step || 'script';         // 'script' or 'audio'\nconst pipelineRunId = body.pipeline_run_id || '';\nconst feedbackText = body.feedback || '';\n\nreturn [{\n  json: {\n    script_id: scriptId,\n    action: action,\n    step: step,\n    pipeline_run_id: pipelineRunId,\n    feedback_text: feedbackText\n  }\n}];"
+        "httpMethod": "GET",
+        "path": "youtube-reject",
+        "responseMode": "lastNode",
+        "options": {}
       },
-      "id": "parse-slack-callback",
-      "name": "Parse Slack Callback",
+      "id": "webhook-reject",
+      "name": "Rejection Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [200, 1800],
+      "webhookId": "youtube-reject"
+    },
+    {
+      "parameters": {
+        "jsCode": "const q = $input.first().json.query || $input.first().json;\nreturn [{ json: { gate: parseInt(q.gate || '0'), run_id: q.run_id || '', action: q.action || 'approve' } }];"
+      },
+      "id": "parse-approval",
+      "name": "Parse Gate Approval",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [450, 900]
     },
     {
       "parameters": {
-        "conditions": {
-          "options": {
-            "caseSensitive": true,
-            "leftValue": "",
-            "typeValidation": "strict"
-          },
-          "conditions": [
-            {
-              "id": "action-check",
-              "leftValue": "={{ $json.action }}",
-              "rightValue": "approve",
-              "operator": {
-                "type": "string",
-                "operation": "equals"
-              }
-            }
-          ],
-          "combinator": "and"
+        "rules": {
+          "values": [
+            { "outputIndex": 0, "value": 0 },
+            { "outputIndex": 1, "value": 1 },
+            { "outputIndex": 2, "value": 2 },
+            { "outputIndex": 3, "value": 3 },
+            { "outputIndex": 4, "value": 4 },
+            { "outputIndex": 5, "value": 5 }
+          ]
         },
-        "options": {}
+        "dataType": "number",
+        "value": "={{ $json.gate }}"
       },
-      "id": "check-slack-action",
-      "name": "Action = Approve?",
-      "type": "n8n-nodes-base.if",
-      "typeVersion": 2.2,
-      "position": [700, 900]
+      "id": "gate-router",
+      "name": "Gate Router",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [700, 900],
+      "notes": "Routes approval to correct continuation: Gate 0→Fetch, Gate 1→Script, etc."
     },
     {
       "parameters": {
-        "jsCode": "const data = $input.first().json;\n\nif (data.step === 'script') {\n  // Human approved the script text → update DB status\n  return [{ json: { message: 'Script approved by human.', script_id: data.script_id, next: 'continue_pipeline' } }];\n} else if (data.step === 'audio') {\n  // Human approved the audio → mark as ready for upload\n  return [{ json: { message: 'Audio approved by human. Ready for YouTube upload.', script_id: data.script_id, next: 'ready' } }];\n}\n\nreturn [{ json: { message: 'Unknown step', data } }];"
+        "command": "={{ 'cd /home/node/project && .venv/bin/python3 scripts/fetch_game_data.py --type monthly_releases --run-id ' + $json.run_id }}"
       },
-      "id": "handle-human-approve",
-      "name": "Handle Approve",
+      "id": "step1-fetch",
+      "name": "1. Fetch Game Data",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [1000, 500]
+    },
+    {
+      "parameters": {
+        "jsCode": "const stdout = $input.first().json.stdout || '';\nconst lines = stdout.trim().split('\\n');\ntry { const data = JSON.parse(lines[lines.length - 1]);\n  return [{ json: { ...data, run_id: $('Parse Gate Approval').first().json.run_id } }];\n} catch (e) { throw new Error('Parse fetch failed'); }"
+      },
+      "id": "parse-fetch",
+      "name": "Parse Fetch",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [1000, 800]
+      "position": [1250, 500]
     },
     {
       "parameters": {
-        "command": "={{ 'cd /home/node/project && /home/node/project/.venv/bin/python3 scripts/update_rag.py --feedback-text \"' + ($json.feedback_text || 'Human rejected without comment') + '\" --script-id ' + $json.script_id + ' --type rejection' }}"
+        "command": "={{ 'cd /home/node/project && .venv/bin/python3 -c \"from services.mattermost_service import MattermostService; mm = MattermostService(); mm.send_gate_approval(1, \\\"بيانات الألعاب جاهزة\\\", {\\\"الألعاب\\\": \\\"' + ($json.games_found || 0) + '\\\", \\\"المصدر\\\": \\\"RAWG API\\\"}, \\\"' + $json.run_id + '\\\")\"' }}"
       },
-      "id": "store-rejection-feedback",
+      "id": "gate1-notify",
+      "name": "Gate 1: Data Approval",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [1500, 500],
+      "notes": "Pipeline PAUSES — waiting for data approval."
+    },
+    {
+      "parameters": {
+        "command": "={{ 'cd /home/node/project && .venv/bin/python3 scripts/generate_script.py --type monthly_releases --run-id ' + $json.run_id }}"
+      },
+      "id": "step2-script",
+      "name": "2. Generate Script",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [1000, 700]
+    },
+    {
+      "parameters": {
+        "jsCode": "const stdout = $input.first().json.stdout || '';\nconst lines = stdout.trim().split('\\n');\ntry { const data = JSON.parse(lines[lines.length - 1]);\n  return [{ json: { ...data, run_id: $('Parse Gate Approval').first().json.run_id } }];\n} catch (e) { throw new Error('Parse script failed'); }"
+      },
+      "id": "parse-script",
+      "name": "Parse Script",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1250, 700]
+    },
+    {
+      "parameters": {
+        "command": "={{ 'cd /home/node/project && .venv/bin/python3 scripts/validate_script.py --script-id ' + $json.script_id + ' --run-id ' + $json.run_id }}"
+      },
+      "id": "step2b-validate",
+      "name": "2b. Validate Script",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [1500, 700]
+    },
+    {
+      "parameters": {
+        "jsCode": "const stdout = $input.first().json.stdout || '';\nconst lines = stdout.trim().split('\\n');\ntry { const data = JSON.parse(lines[lines.length - 1]);\n  return [{ json: { ...data, run_id: $('Parse Gate Approval').first().json.run_id } }];\n} catch (e) { throw new Error('Parse validation failed'); }"
+      },
+      "id": "parse-validation",
+      "name": "Parse Validation",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1750, 700]
+    },
+    {
+      "parameters": {
+        "command": "={{ 'cd /home/node/project && .venv/bin/python3 -c \"from services.mattermost_service import MattermostService; mm = MattermostService(); mm.send_gate_approval(2, \\\"السكريبت جاهز — تقييم: ' + ($json.overall_score || 0) + '/100\\\", {\\\"العنوان\\\": \\\"' + ($json.title || '').replace(/\"/g, '') + '\\\", \\\"التقييم\\\": \\\"' + ($json.overall_score || 0) + '/100\\\", \\\"ID\\\": \\\"' + ($json.script_id || '') + '\\\"}, \\\"' + $json.run_id + '\\\")\"' }}"
+      },
+      "id": "gate2-notify",
+      "name": "Gate 2: Script Approval",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [2000, 700],
+      "notes": "Pipeline PAUSES — waiting for script approval."
+    },
+    {
+      "parameters": {
+        "command": "={{ 'cd /home/node/project && .venv/bin/python3 scripts/generate_metadata.py --script-id ' + $('Parse Validation').first().json.script_id + ' --run-id ' + $json.run_id }}"
+      },
+      "id": "step3-metadata",
+      "name": "3. Generate Metadata",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [1000, 900]
+    },
+    {
+      "parameters": {
+        "jsCode": "const stdout = $input.first().json.stdout || '';\nconst lines = stdout.trim().split('\\n');\ntry { const data = JSON.parse(lines[lines.length - 1]);\n  return [{ json: { ...data, run_id: $('Parse Gate Approval').first().json.run_id } }];\n} catch (e) { throw new Error('Parse metadata failed'); }"
+      },
+      "id": "parse-metadata",
+      "name": "Parse Metadata",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1250, 900]
+    },
+    {
+      "parameters": {
+        "command": "={{ 'cd /home/node/project && .venv/bin/python3 -c \"from services.mattermost_service import MattermostService; mm = MattermostService(); mm.send_gate_approval(3, \\\"البيانات الوصفية جاهزة\\\", {\\\"العنوان\\\": \\\"' + ($json.title || '').replace(/\"/g, '') + '\\\"}, \\\"' + $json.run_id + '\\\")\"' }}"
+      },
+      "id": "gate3-notify",
+      "name": "Gate 3: Metadata Approval",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [1500, 900],
+      "notes": "Pipeline PAUSES — waiting for metadata approval."
+    },
+    {
+      "parameters": {
+        "command": "={{ 'cd /home/node/project && .venv/bin/python3 scripts/generate_voiceover.py --script-id ' + $('Parse Validation').first().json.script_id + ' --run-id ' + $json.run_id }}"
+      },
+      "id": "step4-voiceover",
+      "name": "4. Generate Voiceover",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [1000, 1100]
+    },
+    {
+      "parameters": {
+        "jsCode": "const stdout = $input.first().json.stdout || '';\nconst lines = stdout.trim().split('\\n');\ntry { const data = JSON.parse(lines[lines.length - 1]);\n  return [{ json: { ...data, run_id: $('Parse Gate Approval').first().json.run_id } }];\n} catch (e) { throw new Error('Parse voiceover failed'); }"
+      },
+      "id": "parse-voiceover",
+      "name": "Parse Voiceover",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1250, 1100]
+    },
+    {
+      "parameters": {
+        "command": "={{ 'cd /home/node/project && .venv/bin/python3 -c \"from services.mattermost_service import MattermostService; mm = MattermostService(); mm.send_gate_approval(4, \\\"التعليق الصوتي جاهز — المدة: ' + ($json.duration_seconds || 0) + ' ثانية\\\", {\\\"المدة\\\": \\\"' + ($json.duration_seconds || 0) + 's\\\", \\\"الملف\\\": \\\"' + ($json.audio_file || '') + '\\\"}, \\\"' + $json.run_id + '\\\")\"' }}"
+      },
+      "id": "gate4-notify",
+      "name": "Gate 4: Audio Approval",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [1500, 1100],
+      "notes": "Pipeline PAUSES — waiting for audio approval."
+    },
+    {
+      "parameters": {
+        "command": "={{ 'cd /home/node/project && .venv/bin/python3 -c \"from services.mattermost_service import MattermostService; mm = MattermostService(); mm.send_gate_approval(5, \\\"جاهز للنشر — يرجى إرفاق الصورة المصغرة كرد ثم الموافقة\\\", {\\\"المنصة\\\": \\\"YouTube\\\", \\\"الحالة\\\": \\\"جاهز\\\"}, \\\"' + $json.run_id + '\\\")\"' }}"
+      },
+      "id": "gate5-notify",
+      "name": "Gate 5: Publish + Thumbnail",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [1000, 1350],
+      "notes": "Pipeline PAUSES — waiting for thumbnail upload + final approval."
+    },
+    {
+      "parameters": {
+        "jsCode": "// Gate 5 approved — thumbnail was uploaded as Mattermost thread reply.\n// Pass through to Update RAG.\nreturn [{ json: { run_id: $('Parse Gate Approval').first().json.run_id, gate: 5, extract_thumbnail: true } }];"
+      },
+      "id": "extract-thumbnail",
+      "name": "Extract Thumbnail",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1000, 1550]
+    },
+    {
+      "parameters": {
+        "command": "={{ 'cd /home/node/project && .venv/bin/python3 scripts/update_rag.py --run-id ' + $json.run_id }}"
+      },
+      "id": "update-rag",
+      "name": "6. Update RAG",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [1250, 1550]
+    },
+    {
+      "parameters": {
+        "jsCode": "return [{ json: { success: true, message: '✅ YouTube pipeline complete.', run_id: $json.run_id } }];"
+      },
+      "id": "pipeline-complete",
+      "name": "Pipeline Complete",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1500, 1550]
+    },
+    {
+      "parameters": {
+        "jsCode": "const q = $input.first().json.query || $input.first().json;\nconst gate = parseInt(q.gate || '0');\nconst names = {0:'Plan',1:'Data',2:'Script',3:'Metadata',4:'Audio',5:'Publish'};\nreturn [{ json: { success: false, message: '❌ Rejected at Gate '+gate+' ('+names[gate]+').', gate, run_id: q.run_id||'' } }];"
+      },
+      "id": "handle-rejection",
+      "name": "Handle Rejection",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [450, 1800]
+    },
+    {
+      "parameters": {
+        "command": "={{ 'cd /home/node/project && .venv/bin/python3 scripts/update_rag.py --type rejection --gate ' + $json.gate + ' --run-id ' + $json.run_id }}"
+      },
+      "id": "store-rejection",
       "name": "Store Rejection in RAG",
       "type": "n8n-nodes-base.executeCommand",
       "typeVersion": 1,
-      "position": [1000, 1050],
-      "notes": "When human rejects, store the feedback in RAG for future learning."
+      "position": [700, 1800]
     },
     {
       "parameters": {
@@ -273,39 +343,23 @@
         "options": {}
       },
       "id": "webhook-event",
-      "name": "Event Trigger Webhook",
+      "name": "Event Trigger",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2,
-      "position": [200, 1400],
-      "webhookId": "trigger-content",
-      "notes": "For event-based content like aaa_review or upcoming_games. POST with: {\"content_type\": \"aaa_review\", \"game_slug\": \"elden-ring\"}"
+      "position": [200, 2050],
+      "webhookId": "trigger-content"
     },
     {
       "parameters": {
         "values": {
           "string": [
-            {
-              "name": "content_type",
-              "value": "={{ $json.body.content_type || 'aaa_review' }}"
-            },
-            {
-              "name": "game_slug",
-              "value": "={{ $json.body.game_slug || '' }}"
-            },
-            {
-              "name": "trigger_source",
-              "value": "event"
-            }
+            { "name": "content_type", "value": "={{ $json.body.content_type || 'aaa_review' }}" },
+            { "name": "game_slug", "value": "={{ $json.body.game_slug || '' }}" },
+            { "name": "trigger_source", "value": "event" }
           ],
           "number": [
-            {
-              "name": "year",
-              "value": "={{ $json.body.year || new Date().getFullYear() }}"
-            },
-            {
-              "name": "month",
-              "value": "={{ $json.body.month || new Date().getMonth() + 1 }}"
-            }
+            { "name": "year", "value": "={{ $json.body.year || new Date().getFullYear() }}" },
+            { "name": "month", "value": "={{ $json.body.month || new Date().getMonth() + 1 }}" }
           ]
         },
         "options": {}
@@ -314,106 +368,88 @@
       "name": "Set Event Params",
       "type": "n8n-nodes-base.set",
       "typeVersion": 3.4,
-      "position": [450, 1400]
+      "position": [450, 2050]
     }
   ],
   "connections": {
     "Monthly Schedule (25th)": {
-      "main": [
-        [{ "node": "Normalize Input", "type": "main", "index": 0 }]
-      ]
+      "main": [[{ "node": "Normalize Input", "type": "main", "index": 0 }]]
     },
     "Manual Trigger Webhook": {
-      "main": [
-        [{ "node": "Normalize Input", "type": "main", "index": 0 }]
-      ]
+      "main": [[{ "node": "Normalize Input", "type": "main", "index": 0 }]]
     },
     "Normalize Input": {
+      "main": [[{ "node": "0. Generate Plan", "type": "main", "index": 0 }]]
+    },
+    "0. Generate Plan": {
+      "main": [[{ "node": "Parse Plan", "type": "main", "index": 0 }]]
+    },
+    "Parse Plan": {
+      "main": [[{ "node": "Gate 0: Plan Approval", "type": "main", "index": 0 }]]
+    },
+    "Approval Webhook": {
+      "main": [[{ "node": "Parse Gate Approval", "type": "main", "index": 0 }]]
+    },
+    "Parse Gate Approval": {
+      "main": [[{ "node": "Gate Router", "type": "main", "index": 0 }]]
+    },
+    "Gate Router": {
       "main": [
-        [{ "node": "1. Fetch Game Data", "type": "main", "index": 0 }]
+        [{ "node": "1. Fetch Game Data", "type": "main", "index": 0 }],
+        [{ "node": "2. Generate Script", "type": "main", "index": 0 }],
+        [{ "node": "3. Generate Metadata", "type": "main", "index": 0 }],
+        [{ "node": "4. Generate Voiceover", "type": "main", "index": 0 }],
+        [{ "node": "Gate 5: Publish + Thumbnail", "type": "main", "index": 0 }],
+        [{ "node": "Extract Thumbnail", "type": "main", "index": 0 }]
       ]
     },
     "1. Fetch Game Data": {
-      "main": [
-        [{ "node": "Parse Fetch Result", "type": "main", "index": 0 }]
-      ]
+      "main": [[{ "node": "Parse Fetch", "type": "main", "index": 0 }]]
     },
-    "Parse Fetch Result": {
-      "main": [
-        [{ "node": "2. Generate Script", "type": "main", "index": 0 }]
-      ]
+    "Parse Fetch": {
+      "main": [[{ "node": "Gate 1: Data Approval", "type": "main", "index": 0 }]]
     },
     "2. Generate Script": {
-      "main": [
-        [{ "node": "Parse Script Result", "type": "main", "index": 0 }]
-      ]
+      "main": [[{ "node": "Parse Script", "type": "main", "index": 0 }]]
     },
-    "Parse Script Result": {
-      "main": [
-        [{ "node": "3. Validate Script", "type": "main", "index": 0 }]
-      ]
+    "Parse Script": {
+      "main": [[{ "node": "2b. Validate Script", "type": "main", "index": 0 }]]
     },
-    "3. Validate Script": {
-      "main": [
-        [{ "node": "Parse Validation", "type": "main", "index": 0 }]
-      ]
+    "2b. Validate Script": {
+      "main": [[{ "node": "Parse Validation", "type": "main", "index": 0 }]]
     },
     "Parse Validation": {
-      "main": [
-        [{ "node": "Approved?", "type": "main", "index": 0 }]
-      ]
+      "main": [[{ "node": "Gate 2: Script Approval", "type": "main", "index": 0 }]]
     },
-    "Approved?": {
-      "main": [
-        [
-          { "node": "4. Generate Metadata", "type": "main", "index": 0 },
-          { "node": "5. Generate Voiceover", "type": "main", "index": 0 }
-        ],
-        [
-          { "node": "Handle Rejection", "type": "main", "index": 0 }
-        ]
-      ]
+    "3. Generate Metadata": {
+      "main": [[{ "node": "Parse Metadata", "type": "main", "index": 0 }]]
     },
-    "4. Generate Metadata": {
-      "main": [
-        [{ "node": "Merge Results", "type": "main", "index": 0 }]
-      ]
+    "Parse Metadata": {
+      "main": [[{ "node": "Gate 3: Metadata Approval", "type": "main", "index": 0 }]]
     },
-    "5. Generate Voiceover": {
-      "main": [
-        [{ "node": "Merge Results", "type": "main", "index": 0 }]
-      ]
+    "4. Generate Voiceover": {
+      "main": [[{ "node": "Parse Voiceover", "type": "main", "index": 0 }]]
     },
-    "Merge Results": {
-      "main": [
-        [{ "node": "6. Update RAG", "type": "main", "index": 0 }]
-      ]
+    "Parse Voiceover": {
+      "main": [[{ "node": "Gate 4: Audio Approval", "type": "main", "index": 0 }]]
     },
-    "Slack Approval Callback": {
-      "main": [
-        [{ "node": "Parse Slack Callback", "type": "main", "index": 0 }]
-      ]
+    "Extract Thumbnail": {
+      "main": [[{ "node": "6. Update RAG", "type": "main", "index": 0 }]]
     },
-    "Parse Slack Callback": {
-      "main": [
-        [{ "node": "Action = Approve?", "type": "main", "index": 0 }]
-      ]
+    "6. Update RAG": {
+      "main": [[{ "node": "Pipeline Complete", "type": "main", "index": 0 }]]
     },
-    "Action = Approve?": {
-      "main": [
-        [{ "node": "Handle Approve", "type": "main", "index": 0 }],
-        [{ "node": "Store Rejection in RAG", "type": "main", "index": 0 }]
-      ]
+    "Rejection Webhook": {
+      "main": [[{ "node": "Handle Rejection", "type": "main", "index": 0 }]]
     },
-    "Event Trigger Webhook": {
-      "main": [
-        [{ "node": "Set Event Params", "type": "main", "index": 0 }]
-      ]
+    "Handle Rejection": {
+      "main": [[{ "node": "Store Rejection in RAG", "type": "main", "index": 0 }]]
+    },
+    "Event Trigger": {
+      "main": [[{ "node": "Set Event Params", "type": "main", "index": 0 }]]
     },
     "Set Event Params": {
-      "main": [
-        [{ "node": "Normalize Input", "type": "main", "index": 0 }]
-      ]
+      "main": [[{ "node": "Normalize Input", "type": "main", "index": 0 }]]
     }
   },
   "settings": {
@@ -423,12 +459,11 @@
     "saveDataSuccessExecution": "all",
     "timezone": "Asia/Riyadh"
   },
-  "staticData": null,
   "tags": [
     { "name": "youtube" },
     { "name": "gaming" },
-    { "name": "arabic" }
+    { "name": "arabic" },
+    { "name": "hitl-6gate" }
   ],
-  "pinData": {},
-  "versionId": "1.0.0"
+  "versionId": "2.0.0"
 }

@@ -40,7 +40,6 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
 from services.elevenlabs_service import ElevenLabsService
-from services.mattermost_service import MattermostService
 from database.connection import execute_query
 from config.settings import settings
 
@@ -227,21 +226,9 @@ def main():
         )
 
         # ------------------------------------------------------------------
-        # Send to Mattermost for audio approval (Step 2)
+        # Gate 4 approval is now handled by n8n workflow (6-Gate HITL).
+        # This script only outputs JSON to stdout for n8n to parse.
         # ------------------------------------------------------------------
-        mattermost_sent = False
-        if not args.skip_notify:
-            try:
-                mm = MattermostService()
-                mattermost_sent = mm.send_audio_for_approval(
-                    script_id=script_id,
-                    title=title,
-                    audio_duration=tts_result["duration_seconds"],
-                    audio_file_path=tts_result["file_path"],
-                    pipeline_run_id=pipeline_run_id,
-                )
-            except Exception as exc:
-                logger.error("Failed to send Mattermost audio notification: %s", exc)
 
         # ------------------------------------------------------------------
         # Output
@@ -255,7 +242,6 @@ def main():
             "file_size_bytes": tts_result["file_size_bytes"],
             "duration_seconds": tts_result["duration_seconds"],
             "duration_minutes": round(tts_result["duration_seconds"] / 60, 1),
-            "mattermost_sent": mattermost_sent,
             "pipeline_run_id": pipeline_run_id,
         }
 

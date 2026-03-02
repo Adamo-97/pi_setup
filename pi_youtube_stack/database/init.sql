@@ -191,3 +191,22 @@ CREATE TRIGGER update_games_updated_at
 CREATE TRIGGER update_scripts_updated_at
     BEFORE UPDATE ON generated_scripts
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+-- ============================================================================
+-- 9. Read-only user for cross-stack Planner Agent access
+-- ============================================================================
+-- Other stacks (TikTok, Instagram, X) connect as yt_readonly to
+-- read the games table for their Planner Agents. This user has
+-- SELECT-only permission on the games table — no writes, no other tables.
+-- ============================================================================
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'yt_readonly') THEN
+        CREATE USER yt_readonly WITH PASSWORD 'readonly_pass_2025';
+    END IF;
+END
+$$;
+
+GRANT CONNECT ON DATABASE youtube_rag TO yt_readonly;
+GRANT USAGE ON SCHEMA public TO yt_readonly;
+GRANT SELECT ON games TO yt_readonly;

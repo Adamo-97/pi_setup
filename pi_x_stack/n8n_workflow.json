@@ -1,387 +1,229 @@
 {
-  "name": "X Gaming Pipeline",
+  "name": "X/Twitter Pipeline (6-Gate HITL)",
   "nodes": [
     {
-      "parameters": {
-        "rule": {
-          "interval": [
-            {
-              "triggerAtHour": 9
-            }
-          ]
-        }
-      },
+      "parameters": { "rule": { "interval": [{ "triggerAtHour": 10 }] } },
       "id": "x-schedule",
-      "name": "Daily 9AM Trigger",
+      "name": "Daily 10AM Trigger",
       "type": "n8n-nodes-base.scheduleTrigger",
       "typeVersion": 1.2,
-      "position": [220, 300]
+      "position": [200, 300]
     },
     {
-      "parameters": {
-        "httpMethod": "POST",
-        "path": "x-manual",
-        "responseMode": "responseNode"
-      },
+      "parameters": { "httpMethod": "POST", "path": "x-manual", "responseMode": "responseNode" },
       "id": "x-webhook-manual",
-      "name": "Manual Trigger Webhook",
+      "name": "Manual Trigger",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2,
-      "position": [220, 520],
+      "position": [200, 520],
       "webhookId": "x-manual"
     },
     {
       "parameters": {
-        "httpMethod": "GET",
-        "path": "x-approve",
-        "responseMode": "responseNode"
+        "jsCode": "const runId = require('crypto').randomUUID();\nreturn [{ json: { content_type: 'hot_take', duration: 35, run_id: runId } }];"
       },
-      "id": "x-webhook-approve",
-      "name": "Approve Webhook",
-      "type": "n8n-nodes-base.webhook",
-      "typeVersion": 2,
-      "position": [220, 1600],
-      "webhookId": "x-approve"
-    },
-    {
-      "parameters": {
-        "httpMethod": "GET",
-        "path": "x-reject",
-        "responseMode": "responseNode"
-      },
-      "id": "x-webhook-reject",
-      "name": "Reject Webhook",
-      "type": "n8n-nodes-base.webhook",
-      "typeVersion": 2,
-      "position": [220, 1820],
-      "webhookId": "x-reject"
-    },
-    {
-      "parameters": {
-        "command": "cd /home/node/project && python -m pipeline.step1_scrape_news --source all"
-      },
-      "id": "x-step1",
-      "name": "Step 1: Scrape News",
-      "type": "n8n-nodes-base.executeCommand",
-      "typeVersion": 1,
-      "position": [500, 400]
-    },
-    {
-      "parameters": {
-        "command": "cd /home/node/project && python -m pipeline.step2_generate_script --type {{ $json.content_type || 'trending_news' }} --duration {{ $json.duration || 45 }}"
-      },
-      "id": "x-step2",
-      "name": "Step 2: Generate Script",
-      "type": "n8n-nodes-base.executeCommand",
-      "typeVersion": 1,
-      "position": [740, 400]
-    },
-    {
-      "parameters": {
-        "jsCode": "const stdout = $input.first().json.stdout || '';\nconst lines = stdout.trim().split('\\n');\nconst lastLine = lines[lines.length - 1];\ntry {\n  const data = JSON.parse(lastLine);\n  return [{ json: data }];\n} catch (e) {\n  throw new Error('Failed to parse script output: ' + lastLine);\n}"
-      },
-      "id": "x-parse-script",
-      "name": "Parse Script Output",
+      "id": "x-set-defaults",
+      "name": "Set Defaults",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [960, 400]
+      "position": [450, 400]
+    },
+    {
+      "parameters": { "command": "cd /home/node/project && python -c \"from agents.planner_agent import PlannerAgent; import json; p = PlannerAgent(); print(json.dumps(p.run()))\"" },
+      "id": "x-step0",
+      "name": "0. Generate Plan",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [700, 400]
     },
     {
       "parameters": {
-        "command": "cd /home/node/project && python -m pipeline.step3_validate_script --script-id {{ $json.script_id }}"
+        "jsCode": "const stdout = $input.first().json.stdout || '';\nconst lines = stdout.trim().split('\\n');\ntry { const plan = JSON.parse(lines[lines.length - 1]);\n  return [{ json: { ...plan, run_id: $('Set Defaults').first().json.run_id } }];\n} catch (e) { throw new Error('Parse plan failed'); }"
       },
-      "id": "x-step3",
-      "name": "Step 3: Validate Script",
+      "id": "x-parse-plan",
+      "name": "Parse Plan",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [950, 400]
+    },
+    {
+      "parameters": {
+        "command": "={{ 'cd /home/node/project && python -c \"from services.mattermost_service import MattermostService; import os; mm = MattermostService(os.environ[\\\"MATTERMOST_URL\\\"], os.environ[\\\"MATTERMOST_BOT_TOKEN\\\"], os.environ[\\\"MATTERMOST_CHANNEL_ID\\\"]); mm.send_gate_approval(0, \\\"خطة منشور جديدة\\\", {\\\"الموضوع\\\": \\\"' + ($json.proposed_topic || '').replace(/\"/g, '') + '\\\", \\\"النوع\\\": \\\"' + ($json.proposed_content_type || '') + '\\\"}, \\\"' + $json.run_id + '\\\", budget_status=\\\"' + ($json.budget_status || '') + '\\\")\"' }}"
+      },
+      "id": "x-gate0",
+      "name": "Gate 0: Plan Approval",
       "type": "n8n-nodes-base.executeCommand",
       "typeVersion": 1,
       "position": [1200, 400]
     },
     {
+      "parameters": { "httpMethod": "GET", "path": "x-approve", "responseMode": "lastNode" },
+      "id": "x-webhook-approve",
+      "name": "Approval Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [200, 900],
+      "webhookId": "x-approve"
+    },
+    {
+      "parameters": { "httpMethod": "GET", "path": "x-reject", "responseMode": "lastNode" },
+      "id": "x-webhook-reject",
+      "name": "Rejection Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [200, 1800],
+      "webhookId": "x-reject"
+    },
+    {
       "parameters": {
-        "jsCode": "const stdout = $input.first().json.stdout || '';\nconst lines = stdout.trim().split('\\n');\nconst lastLine = lines[lines.length - 1];\ntry {\n  const data = JSON.parse(lastLine);\n  return [{ json: { ...data, script_id: $('Parse Script Output').first().json.script_id } }];\n} catch (e) {\n  throw new Error('Failed to parse validation output: ' + lastLine);\n}"
+        "jsCode": "const q = $input.first().json.query || $input.first().json;\nreturn [{ json: { gate: parseInt(q.gate || '0'), run_id: q.run_id || '', action: q.action || 'approve' } }];"
       },
-      "id": "x-parse-validation",
-      "name": "Parse Validation",
+      "id": "x-parse-approval",
+      "name": "Parse Gate Approval",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [1420, 400]
+      "position": [450, 900]
     },
     {
       "parameters": {
-        "conditions": {
-          "boolean": [
-            {
-              "value1": "={{ $json.approved }}",
-              "value2": true
-            }
-          ]
-        }
+        "rules": { "values": [
+          { "outputIndex": 0, "value": 0 }, { "outputIndex": 1, "value": 1 },
+          { "outputIndex": 2, "value": 2 }, { "outputIndex": 3, "value": 3 },
+          { "outputIndex": 4, "value": 4 }, { "outputIndex": 5, "value": 5 }
+        ] },
+        "dataType": "number",
+        "value": "={{ $json.gate }}"
       },
-      "id": "x-check-approved",
-      "name": "Approved?",
-      "type": "n8n-nodes-base.if",
-      "typeVersion": 2,
-      "position": [1640, 400]
+      "id": "x-gate-router",
+      "name": "Gate Router",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [700, 900]
+    },
+    {
+      "parameters": { "command": "={{ 'cd /home/node/project && python -m pipeline.step1_scrape_news --source all --run-id ' + $json.run_id }}" },
+      "id": "x-step1", "name": "1. Scrape News", "type": "n8n-nodes-base.executeCommand", "typeVersion": 1, "position": [1000, 500]
     },
     {
       "parameters": {
-        "command": "cd /home/node/project && python -m pipeline.step4_generate_voiceover --script-id {{ $json.script_id }}"
+        "jsCode": "const stdout = $input.first().json.stdout || '';\nconst lines = stdout.trim().split('\\n');\ntry { const d = JSON.parse(lines[lines.length-1]); return [{json:{...d,run_id:$('Parse Gate Approval').first().json.run_id}}]; } catch(e) { return [{json:{success:true,run_id:$('Parse Gate Approval').first().json.run_id}}]; }"
       },
-      "id": "x-step4",
-      "name": "Step 4: Generate Voiceover",
-      "type": "n8n-nodes-base.executeCommand",
-      "typeVersion": 1,
-      "position": [1900, 300]
+      "id": "x-parse1", "name": "Parse News", "type": "n8n-nodes-base.code", "typeVersion": 2, "position": [1250, 500]
+    },
+    {
+      "parameters": { "command": "={{ 'cd /home/node/project && python -c \"from services.mattermost_service import MattermostService; import os; mm = MattermostService(os.environ[\\\"MATTERMOST_URL\\\"], os.environ[\\\"MATTERMOST_BOT_TOKEN\\\"], os.environ[\\\"MATTERMOST_CHANNEL_ID\\\"]); mm.send_gate_approval(1, \\\"الأخبار جاهزة\\\", {\\\"المصادر\\\": \\\"RSS + Google\\\"}, \\\"' + $json.run_id + '\\\")\"' }}" },
+      "id": "x-gate1", "name": "Gate 1: News Approval", "type": "n8n-nodes-base.executeCommand", "typeVersion": 1, "position": [1500, 500]
+    },
+    {
+      "parameters": { "command": "={{ 'cd /home/node/project && python -m pipeline.step2_generate_script --type hot_take --duration 35 --run-id ' + $json.run_id }}" },
+      "id": "x-step2", "name": "2. Generate Script", "type": "n8n-nodes-base.executeCommand", "typeVersion": 1, "position": [1000, 700]
+    },
+    {
+      "parameters": { "jsCode": "const stdout=$input.first().json.stdout||'';const lines=stdout.trim().split('\\n');try{const d=JSON.parse(lines[lines.length-1]);return[{json:{...d,run_id:$('Parse Gate Approval').first().json.run_id}}];}catch(e){throw new Error('Parse script failed');}" },
+      "id": "x-parse2", "name": "Parse Script", "type": "n8n-nodes-base.code", "typeVersion": 2, "position": [1250, 700]
+    },
+    {
+      "parameters": { "command": "={{ 'cd /home/node/project && python -m pipeline.step3_validate_script --script-id ' + $json.script_id + ' --run-id ' + $json.run_id }}" },
+      "id": "x-step3", "name": "3. Validate Script", "type": "n8n-nodes-base.executeCommand", "typeVersion": 1, "position": [1500, 700]
+    },
+    {
+      "parameters": { "jsCode": "const stdout=$input.first().json.stdout||'';const lines=stdout.trim().split('\\n');try{const d=JSON.parse(lines[lines.length-1]);return[{json:{...d,run_id:$('Parse Gate Approval').first().json.run_id}}];}catch(e){throw new Error('Parse validation failed');}" },
+      "id": "x-parse3", "name": "Parse Validation", "type": "n8n-nodes-base.code", "typeVersion": 2, "position": [1750, 700]
+    },
+    {
+      "parameters": { "command": "={{ 'cd /home/node/project && python -c \"from services.mattermost_service import MattermostService; import os; mm = MattermostService(os.environ[\\\"MATTERMOST_URL\\\"], os.environ[\\\"MATTERMOST_BOT_TOKEN\\\"], os.environ[\\\"MATTERMOST_CHANNEL_ID\\\"]); mm.send_gate_approval(2, \\\"السكريبت جاهز\\\", {\\\"التقييم\\\": \\\"' + ($json.overall_score||0) + '/100\\\"}, \\\"' + $json.run_id + '\\\")\"' }}" },
+      "id": "x-gate2", "name": "Gate 2: Script Approval", "type": "n8n-nodes-base.executeCommand", "typeVersion": 1, "position": [2000, 700]
+    },
+    {
+      "parameters": { "command": "={{ 'cd /home/node/project && python -m pipeline.step4_generate_voiceover --script-id ' + $json.script_id + ' --run-id ' + $json.run_id }}" },
+      "id": "x-step4", "name": "4. Generate Voiceover", "type": "n8n-nodes-base.executeCommand", "typeVersion": 1, "position": [1000, 900]
+    },
+    {
+      "parameters": { "jsCode": "const stdout=$input.first().json.stdout||'';const lines=stdout.trim().split('\\n');try{const d=JSON.parse(lines[lines.length-1]);return[{json:{...d,run_id:$('Parse Gate Approval').first().json.run_id}}];}catch(e){throw new Error('Parse voiceover failed');}" },
+      "id": "x-parse4", "name": "Parse Voiceover", "type": "n8n-nodes-base.code", "typeVersion": 2, "position": [1250, 900]
+    },
+    {
+      "parameters": { "command": "={{ 'cd /home/node/project && python -c \"from services.mattermost_service import MattermostService; import os; mm = MattermostService(os.environ[\\\"MATTERMOST_URL\\\"], os.environ[\\\"MATTERMOST_BOT_TOKEN\\\"], os.environ[\\\"MATTERMOST_CHANNEL_ID\\\"]); mm.send_gate_approval(3, \\\"الصوت جاهز\\\", {\\\"المدة\\\": \\\"' + ($json.duration_seconds||0) + 's\\\"}, \\\"' + $json.run_id + '\\\")\"' }}" },
+      "id": "x-gate3", "name": "Gate 3: Voiceover Approval", "type": "n8n-nodes-base.executeCommand", "typeVersion": 1, "position": [1500, 900]
+    },
+    {
+      "parameters": { "command": "={{ 'cd /home/node/project && python -m pipeline.step5_download_footage --script-id ' + $json.script_id + ' --run-id ' + $json.run_id }}" },
+      "id": "x-step5", "name": "5. Download Footage", "type": "n8n-nodes-base.executeCommand", "typeVersion": 1, "position": [1000, 1100]
+    },
+    {
+      "parameters": { "jsCode": "const stdout=$input.first().json.stdout||'';const lines=stdout.trim().split('\\n');try{const d=JSON.parse(lines[lines.length-1]);return[{json:{...d,run_id:$('Parse Gate Approval').first().json.run_id}}];}catch(e){throw new Error('Parse footage failed');}" },
+      "id": "x-parse5", "name": "Parse Footage", "type": "n8n-nodes-base.code", "typeVersion": 2, "position": [1250, 1100]
+    },
+    {
+      "parameters": { "command": "={{ 'cd /home/node/project && python -m pipeline.step6_assemble_video --script-id ' + $json.script_id + ' --run-id ' + $json.run_id }}" },
+      "id": "x-step6", "name": "6. Assemble Video", "type": "n8n-nodes-base.executeCommand", "typeVersion": 1, "position": [1500, 1100]
+    },
+    {
+      "parameters": { "jsCode": "const stdout=$input.first().json.stdout||'';const lines=stdout.trim().split('\\n');try{const d=JSON.parse(lines[lines.length-1]);return[{json:{...d,run_id:$('Parse Gate Approval').first().json.run_id}}];}catch(e){throw new Error('Parse video failed');}" },
+      "id": "x-parse6", "name": "Parse Video", "type": "n8n-nodes-base.code", "typeVersion": 2, "position": [1750, 1100]
+    },
+    {
+      "parameters": { "command": "={{ 'cd /home/node/project && python -c \"from services.mattermost_service import MattermostService; import os; mm = MattermostService(os.environ[\\\"MATTERMOST_URL\\\"], os.environ[\\\"MATTERMOST_BOT_TOKEN\\\"], os.environ[\\\"MATTERMOST_CHANNEL_ID\\\"]); mm.send_gate_approval(4, \\\"الفيديو جاهز\\\", {\\\"الفيديو\\\": \\\"' + ($json.video_id||'') + '\\\"}, \\\"' + $json.run_id + '\\\")\"' }}" },
+      "id": "x-gate4", "name": "Gate 4: Video Approval", "type": "n8n-nodes-base.executeCommand", "typeVersion": 1, "position": [2000, 1100]
+    },
+    {
+      "parameters": { "command": "={{ 'cd /home/node/project && python -c \"from services.mattermost_service import MattermostService; import os; mm = MattermostService(os.environ[\\\"MATTERMOST_URL\\\"], os.environ[\\\"MATTERMOST_BOT_TOKEN\\\"], os.environ[\\\"MATTERMOST_CHANNEL_ID\\\"]); mm.send_gate_approval(5, \\\"جاهز للنشر — أرفق الصورة المصغرة\\\", {\\\"المنصة\\\": \\\"X/Twitter\\\"}, \\\"' + $json.run_id + '\\\")\"' }}" },
+      "id": "x-gate5", "name": "Gate 5: Publish + Thumbnail", "type": "n8n-nodes-base.executeCommand", "typeVersion": 1, "position": [1000, 1350]
+    },
+    {
+      "parameters": { "command": "={{ 'cd /home/node/project && python -m pipeline.step7_publish --mode publish --run-id ' + $json.run_id }}" },
+      "id": "x-step7", "name": "7. Publish", "type": "n8n-nodes-base.executeCommand", "typeVersion": 1, "position": [1000, 1550]
+    },
+    {
+      "parameters": { "command": "={{ 'cd /home/node/project && python -m pipeline.step8_update_rag --run-id ' + $json.run_id }}" },
+      "id": "x-step8", "name": "8. Update RAG", "type": "n8n-nodes-base.executeCommand", "typeVersion": 1, "position": [1250, 1550]
+    },
+    {
+      "parameters": { "jsCode": "return [{ json: { success: true, message: '✅ X/Twitter pipeline complete.' } }];" },
+      "id": "x-complete", "name": "Pipeline Complete", "type": "n8n-nodes-base.code", "typeVersion": 2, "position": [1500, 1550]
     },
     {
       "parameters": {
-        "jsCode": "const stdout = $input.first().json.stdout || '';\nconst lines = stdout.trim().split('\\n');\nconst lastLine = lines[lines.length - 1];\ntry {\n  const data = JSON.parse(lastLine);\n  return [{ json: data }];\n} catch (e) {\n  throw new Error('Failed to parse voiceover output: ' + lastLine);\n}"
+        "jsCode": "const q=$input.first().json.query||$input.first().json;const gate=parseInt(q.gate||'0');const names={0:'Plan',1:'News',2:'Script',3:'Voiceover',4:'Video',5:'Publish'};return[{json:{success:false,message:'❌ Rejected at Gate '+gate+' ('+names[gate]+').',gate,run_id:q.run_id||''}}];"
       },
-      "id": "x-parse-vo",
-      "name": "Parse Voiceover",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [2120, 300]
-    },
-    {
-      "parameters": {
-        "command": "cd /home/node/project && python -m pipeline.step5_download_footage --script-id {{ $json.script_id }}"
-      },
-      "id": "x-step5",
-      "name": "Step 5: Download Footage",
-      "type": "n8n-nodes-base.executeCommand",
-      "typeVersion": 1,
-      "position": [2340, 300]
-    },
-    {
-      "parameters": {
-        "jsCode": "const stdout = $input.first().json.stdout || '';\nconst lines = stdout.trim().split('\\n');\nconst lastLine = lines[lines.length - 1];\ntry {\n  const footage = JSON.parse(lastLine);\n  const voiceover = $('Parse Voiceover').first().json;\n  return [{ json: {\n    script_id: voiceover.script_id,\n    voiceover_id: voiceover.voiceover_id,\n    footage_id: footage.footage_id\n  }}];\n} catch (e) {\n  throw new Error('Failed to parse footage output: ' + lastLine);\n}"
-      },
-      "id": "x-parse-footage",
-      "name": "Parse Footage",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [2560, 300]
-    },
-    {
-      "parameters": {
-        "command": "cd /home/node/project && python -m pipeline.step6_assemble_video --script-id {{ $json.script_id }} --voiceover-id {{ $json.voiceover_id }} --footage-id {{ $json.footage_id }}"
-      },
-      "id": "x-step6",
-      "name": "Step 6: Assemble Video",
-      "type": "n8n-nodes-base.executeCommand",
-      "typeVersion": 1,
-      "position": [2780, 300]
-    },
-    {
-      "parameters": {
-        "jsCode": "const stdout = $input.first().json.stdout || '';\nconst lines = stdout.trim().split('\\n');\nconst lastLine = lines[lines.length - 1];\ntry {\n  const data = JSON.parse(lastLine);\n  return [{ json: data }];\n} catch (e) {\n  throw new Error('Failed to parse video output: ' + lastLine);\n}"
-      },
-      "id": "x-parse-video",
-      "name": "Parse Video",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [3000, 300]
-    },
-    {
-      "parameters": {
-        "command": "cd /home/node/project && python -m pipeline.step7_publish_x --video-id {{ $json.video_id }} --mode notify"
-      },
-      "id": "x-step7-notify",
-      "name": "Step 7: Slack Notify",
-      "type": "n8n-nodes-base.executeCommand",
-      "typeVersion": 1,
-      "position": [3220, 300]
-    },
-    {
-      "parameters": {
-        "command": "cd /home/node/project && python -m pipeline.step7_publish_x --video-id {{ $query.video_id }} --mode publish"
-      },
-      "id": "x-step7-publish",
-      "name": "Step 7: Publish to Buffer",
-      "type": "n8n-nodes-base.executeCommand",
-      "typeVersion": 1,
-      "position": [500, 1600]
-    },
-    {
-      "parameters": {
-        "command": "cd /home/node/project && python -m pipeline.step8_update_rag --video-id {{ $query.video_id || $json.video_id }}"
-      },
-      "id": "x-step8",
-      "name": "Step 8: Update RAG",
-      "type": "n8n-nodes-base.executeCommand",
-      "typeVersion": 1,
-      "position": [780, 1600]
-    },
-    {
-      "parameters": {
-        "respondWith": "text",
-        "responseBody": "✅ X/Twitter video approved and publishing!"
-      },
-      "id": "x-respond-approve",
-      "name": "Respond Approved",
-      "type": "n8n-nodes-base.respondToWebhook",
-      "typeVersion": 1,
-      "position": [1060, 1600]
-    },
-    {
-      "parameters": {
-        "respondWith": "text",
-        "responseBody": "❌ X/Twitter video rejected."
-      },
-      "id": "x-respond-reject",
-      "name": "Respond Rejected",
-      "type": "n8n-nodes-base.respondToWebhook",
-      "typeVersion": 1,
-      "position": [500, 1820]
-    },
-    {
-      "parameters": {
-        "respondWith": "text",
-        "responseBody": "🐦 X/Twitter gaming pipeline started!"
-      },
-      "id": "x-respond-manual",
-      "name": "Respond Manual",
-      "type": "n8n-nodes-base.respondToWebhook",
-      "typeVersion": 1,
-      "position": [3440, 520]
-    },
-    {
-      "parameters": {
-        "values": {
-          "string": [
-            { "name": "content_type", "value": "trending_news" },
-            { "name": "duration", "value": "45" }
-          ]
-        }
-      },
-      "id": "x-set-defaults",
-      "name": "Set Defaults",
-      "type": "n8n-nodes-base.set",
-      "typeVersion": 3.4,
-      "position": [500, 300]
-    },
-    {
-      "parameters": {
-        "message": "=❌ Script rejected (score: {{ $json.overall_score }}). Issues: {{ $json.critical_issues }}",
-        "additionalFields": {}
-      },
-      "id": "x-rejection-log",
-      "name": "Log Rejection",
-      "type": "n8n-nodes-base.noOp",
-      "typeVersion": 1,
-      "position": [1900, 520]
+      "id": "x-handle-rejection", "name": "Handle Rejection", "type": "n8n-nodes-base.code", "typeVersion": 2, "position": [450, 1800]
     }
   ],
   "connections": {
-    "Daily 9AM Trigger": {
+    "Daily 10AM Trigger": { "main": [[{ "node": "Set Defaults", "type": "main", "index": 0 }]] },
+    "Manual Trigger": { "main": [[{ "node": "Set Defaults", "type": "main", "index": 0 }]] },
+    "Set Defaults": { "main": [[{ "node": "0. Generate Plan", "type": "main", "index": 0 }]] },
+    "0. Generate Plan": { "main": [[{ "node": "Parse Plan", "type": "main", "index": 0 }]] },
+    "Parse Plan": { "main": [[{ "node": "Gate 0: Plan Approval", "type": "main", "index": 0 }]] },
+    "Approval Webhook": { "main": [[{ "node": "Parse Gate Approval", "type": "main", "index": 0 }]] },
+    "Parse Gate Approval": { "main": [[{ "node": "Gate Router", "type": "main", "index": 0 }]] },
+    "Gate Router": {
       "main": [
-        [{ "node": "Set Defaults", "type": "main", "index": 0 }]
+        [{ "node": "1. Scrape News", "type": "main", "index": 0 }],
+        [{ "node": "2. Generate Script", "type": "main", "index": 0 }],
+        [{ "node": "4. Generate Voiceover", "type": "main", "index": 0 }],
+        [{ "node": "5. Download Footage", "type": "main", "index": 0 }],
+        [{ "node": "Gate 5: Publish + Thumbnail", "type": "main", "index": 0 }],
+        [{ "node": "7. Publish", "type": "main", "index": 0 }]
       ]
     },
-    "Manual Trigger Webhook": {
-      "main": [
-        [
-          { "node": "Step 1: Scrape News", "type": "main", "index": 0 },
-          { "node": "Respond Manual", "type": "main", "index": 0 }
-        ]
-      ]
-    },
-    "Set Defaults": {
-      "main": [
-        [{ "node": "Step 1: Scrape News", "type": "main", "index": 0 }]
-      ]
-    },
-    "Step 1: Scrape News": {
-      "main": [
-        [{ "node": "Step 2: Generate Script", "type": "main", "index": 0 }]
-      ]
-    },
-    "Step 2: Generate Script": {
-      "main": [
-        [{ "node": "Parse Script Output", "type": "main", "index": 0 }]
-      ]
-    },
-    "Parse Script Output": {
-      "main": [
-        [{ "node": "Step 3: Validate Script", "type": "main", "index": 0 }]
-      ]
-    },
-    "Step 3: Validate Script": {
-      "main": [
-        [{ "node": "Parse Validation", "type": "main", "index": 0 }]
-      ]
-    },
-    "Parse Validation": {
-      "main": [
-        [{ "node": "Approved?", "type": "main", "index": 0 }]
-      ]
-    },
-    "Approved?": {
-      "main": [
-        [{ "node": "Step 4: Generate Voiceover", "type": "main", "index": 0 }],
-        [{ "node": "Log Rejection", "type": "main", "index": 0 }]
-      ]
-    },
-    "Step 4: Generate Voiceover": {
-      "main": [
-        [{ "node": "Parse Voiceover", "type": "main", "index": 0 }]
-      ]
-    },
-    "Parse Voiceover": {
-      "main": [
-        [{ "node": "Step 5: Download Footage", "type": "main", "index": 0 }]
-      ]
-    },
-    "Step 5: Download Footage": {
-      "main": [
-        [{ "node": "Parse Footage", "type": "main", "index": 0 }]
-      ]
-    },
-    "Parse Footage": {
-      "main": [
-        [{ "node": "Step 6: Assemble Video", "type": "main", "index": 0 }]
-      ]
-    },
-    "Step 6: Assemble Video": {
-      "main": [
-        [{ "node": "Parse Video", "type": "main", "index": 0 }]
-      ]
-    },
-    "Parse Video": {
-      "main": [
-        [{ "node": "Step 7: Slack Notify", "type": "main", "index": 0 }]
-      ]
-    },
-    "Approve Webhook": {
-      "main": [
-        [{ "node": "Step 7: Publish to Buffer", "type": "main", "index": 0 }]
-      ]
-    },
-    "Step 7: Publish to Buffer": {
-      "main": [
-        [{ "node": "Step 8: Update RAG", "type": "main", "index": 0 }]
-      ]
-    },
-    "Step 8: Update RAG": {
-      "main": [
-        [{ "node": "Respond Approved", "type": "main", "index": 0 }]
-      ]
-    },
-    "Reject Webhook": {
-      "main": [
-        [{ "node": "Respond Rejected", "type": "main", "index": 0 }]
-      ]
-    }
+    "1. Scrape News": { "main": [[{ "node": "Parse News", "type": "main", "index": 0 }]] },
+    "Parse News": { "main": [[{ "node": "Gate 1: News Approval", "type": "main", "index": 0 }]] },
+    "2. Generate Script": { "main": [[{ "node": "Parse Script", "type": "main", "index": 0 }]] },
+    "Parse Script": { "main": [[{ "node": "3. Validate Script", "type": "main", "index": 0 }]] },
+    "3. Validate Script": { "main": [[{ "node": "Parse Validation", "type": "main", "index": 0 }]] },
+    "Parse Validation": { "main": [[{ "node": "Gate 2: Script Approval", "type": "main", "index": 0 }]] },
+    "4. Generate Voiceover": { "main": [[{ "node": "Parse Voiceover", "type": "main", "index": 0 }]] },
+    "Parse Voiceover": { "main": [[{ "node": "Gate 3: Voiceover Approval", "type": "main", "index": 0 }]] },
+    "5. Download Footage": { "main": [[{ "node": "Parse Footage", "type": "main", "index": 0 }]] },
+    "Parse Footage": { "main": [[{ "node": "6. Assemble Video", "type": "main", "index": 0 }]] },
+    "6. Assemble Video": { "main": [[{ "node": "Parse Video", "type": "main", "index": 0 }]] },
+    "Parse Video": { "main": [[{ "node": "Gate 4: Video Approval", "type": "main", "index": 0 }]] },
+    "7. Publish": { "main": [[{ "node": "8. Update RAG", "type": "main", "index": 0 }]] },
+    "8. Update RAG": { "main": [[{ "node": "Pipeline Complete", "type": "main", "index": 0 }]] },
+    "Rejection Webhook": { "main": [[{ "node": "Handle Rejection", "type": "main", "index": 0 }]] }
   },
-  "settings": {
-    "executionOrder": "v1",
-    "saveManualExecutions": true,
-    "callerPolicy": "workflowsFromSameOwner"
-  },
-  "tags": [
-    { "name": "x" },
-    { "name": "gaming" },
-    { "name": "automation" }
-  ]
+  "settings": { "executionOrder": "v1", "saveManualExecutions": true, "saveDataErrorExecution": "all", "saveDataSuccessExecution": "all", "timezone": "Asia/Riyadh" },
+  "tags": [{ "name": "x-twitter" }, { "name": "gaming" }, { "name": "hitl-6gate" }],
+  "versionId": "2.0.0"
 }

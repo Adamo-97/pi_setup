@@ -67,6 +67,32 @@ class BufferConfig:
 
 
 @dataclass(frozen=True)
+class RedisConfig:
+    url: str = "redis://localhost:6382"
+    max_memory: str = "64mb"
+    ttl_seconds: int = 604800  # 7-day budget key TTL
+
+
+@dataclass(frozen=True)
+class BudgetConfig:
+    nextcloud_url: str = "http://192.168.1.100:8080"
+    nextcloud_user: str = ""
+    nextcloud_password: str = ""
+    nextcloud_path: str = "/remote.php/dav/files/admin/pi_config/budgets.json"
+    local_fallback_path: str = "config/budgets.json"
+    cache_ttl_seconds: int = 3600  # 1-hour Redis cache
+
+
+@dataclass(frozen=True)
+class SharedRAWGConfig:
+    host: str = "192.168.1.100"
+    port: int = 5433
+    database: str = "youtube_rag"
+    user: str = "yt_readonly"
+    password: str = "readonly_pass_2025"
+
+
+@dataclass(frozen=True)
 class N8NConfig:
     webhook_base: str = "http://localhost:5681/webhook"
 
@@ -232,6 +258,29 @@ class _Settings:
         )
         self.video = VideoConfig()
         self.paths = PathsConfig()
+        self.redis = RedisConfig(
+            url=e("REDIS_URL", "redis://localhost:6382"),
+            max_memory=e("REDIS_MAX_MEMORY", "64mb"),
+            ttl_seconds=int(e("REDIS_BUDGET_TTL", "604800")),
+        )
+        self.budget = BudgetConfig(
+            nextcloud_url=e("NEXTCLOUD_URL", "http://192.168.1.100:8080"),
+            nextcloud_user=e("NEXTCLOUD_USER", ""),
+            nextcloud_password=e("NEXTCLOUD_PASSWORD", ""),
+            nextcloud_path=e(
+                "NEXTCLOUD_BUDGETS_PATH",
+                "/remote.php/dav/files/admin/pi_config/budgets.json",
+            ),
+            local_fallback_path=e("BUDGETS_LOCAL_PATH", "config/budgets.json"),
+            cache_ttl_seconds=int(e("BUDGET_CACHE_TTL", "3600")),
+        )
+        self.shared_rawg = SharedRAWGConfig(
+            host=e("SHARED_RAWG_HOST", "192.168.1.100"),
+            port=int(e("SHARED_RAWG_PORT", "5433")),
+            database=e("SHARED_RAWG_DB", "youtube_rag"),
+            user=e("SHARED_RAWG_USER", "yt_readonly"),
+            password=e("SHARED_RAWG_PASSWORD", "readonly_pass_2025"),
+        )
 
         self._loaded = True
 

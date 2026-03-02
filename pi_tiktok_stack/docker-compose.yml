@@ -51,9 +51,36 @@ services:
     networks:
       - tiktok_stack_net
 
+  redis_tiktok:
+    image: redis:7-alpine
+    container_name: redis_tiktok
+    restart: unless-stopped
+    command: >-
+      redis-server
+      --maxmemory 64mb
+      --maxmemory-policy allkeys-lru
+      --appendonly yes
+      --appendfsync everysec
+    ports:
+      - "6380:6379"
+    volumes:
+      - redis_tiktok_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    networks:
+      - tiktok_stack_net
+    deploy:
+      resources:
+        limits:
+          memory: 64M
+
 volumes:
   pgdata_tiktok:
   n8n_tiktok_data:
+  redis_tiktok_data:
 
 networks:
   tiktok_stack_net:

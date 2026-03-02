@@ -51,9 +51,36 @@ services:
     networks:
       - instagram_stack_net
 
+  redis_instagram:
+    image: redis:7-alpine
+    container_name: redis_instagram
+    restart: unless-stopped
+    command: >-
+      redis-server
+      --maxmemory 64mb
+      --maxmemory-policy allkeys-lru
+      --appendonly yes
+      --appendfsync everysec
+    ports:
+      - "6381:6379"
+    volumes:
+      - redis_instagram_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    networks:
+      - instagram_stack_net
+    deploy:
+      resources:
+        limits:
+          memory: 64M
+
 volumes:
   pgdata_instagram:
   n8n_instagram_data:
+  redis_instagram_data:
 
 networks:
   instagram_stack_net:

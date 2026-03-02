@@ -109,6 +109,114 @@ class MattermostService:
             return None
 
     # ================================================================
+    # Universal Gate Approval (Human-in-the-Loop)
+    # ================================================================
+
+    GATE_LABELS = {
+        0: ("📋", "Gate 0 — خطة المحتوى", "Plan Approval"),
+        1: ("📰", "Gate 1 — جمع الأخبار", "Scrape Approval"),
+        2: ("📝", "Gate 2 — السكريبت", "Script Approval"),
+        3: ("🎙️", "Gate 3 — التعليق الصوتي", "Voiceover Approval"),
+        4: ("🎬", "Gate 4 — تجميع الفيديو", "Video Assembly Approval"),
+        5: ("🚀", "Gate 5 — النشر النهائي", "Final Publish"),
+    }
+
+    def send_gate_approval(
+        self,
+        gate_number: int,
+        summary: str,
+        details: dict,
+        run_id: str,
+        file_ids: Optional[list] = None,
+        budget_status: str = "",
+    ) -> bool:
+        """
+        Universal approval gate for Human-in-the-Loop flow.
+
+        Sends a structured Mattermost message with Approve/Reject buttons
+        that trigger n8n webhooks. Used for ALL 6 gates (0-5).
+
+        Gate 5 (Final Publish) includes thumbnail upload instructions.
+        """
+        emoji, label_ar, label_en = self.GATE_LABELS.get(
+            gate_number, ("🔲", f"Gate {gate_number}", f"Gate {gate_number}")
+        )
+
+        approve_url = (
+            f"{self.n8n_base_url}/webhook/x-approve"
+            f"?gate={gate_number}&run_id={run_id}&action=approve"
+        )
+        reject_url = (
+            f"{self.n8n_base_url}/webhook/x-reject"
+            f"?gate={gate_number}&run_id={run_id}&action=reject"
+        )
+
+        table_rows = "\n".join(f"| **{k}** | {v} |" for k, v in details.items())
+
+        message = (
+            f"### {emoji} {label_ar}\n\n"
+            f"**Pipeline Run:** `{run_id[:12]}...`\n\n"
+            f"| الحقل | القيمة |\n"
+            f"|:------|:------|\n"
+            f"{table_rows}\n\n"
+        )
+
+        if budget_status:
+            message += f"**📊 الميزانية:** {budget_status}\n\n"
+
+        message += f"---\n\n{summary}\n\n"
+
+        if gate_number == 5:
+            message += (
+                "---\n\n"
+                "### 🖼️ تحميل الصورة المصغرة\n\n"
+                "**لإضافة الصورة المصغرة (Thumbnail):**\n"
+                "1. اضغط **رد** (Reply) على هذه الرسالة\n"
+                "2. أرفق صورة PNG أو JPEG\n"
+                "3. ثم اضغط **موافقة** أدناه\n\n"
+                "n8n سيأخذ الصورة المرفقة تلقائياً من الرد.\n\n"
+            )
+
+        props = {
+            "attachments": [
+                {
+                    "color": "#2196F3" if gate_number < 5 else "#4CAF50",
+                    "actions": [
+                        {
+                            "id": f"approve_gate_{gate_number}",
+                            "name": "✅ موافقة",
+                            "integration": {
+                                "url": approve_url,
+                                "context": {
+                                    "action": "approve",
+                                    "gate": gate_number,
+                                    "run_id": run_id,
+                                    "platform": "x",
+                                },
+                            },
+                        },
+                        {
+                            "id": f"reject_gate_{gate_number}",
+                            "name": "❌ رفض",
+                            "style": "danger",
+                            "integration": {
+                                "url": reject_url,
+                                "context": {
+                                    "action": "reject",
+                                    "gate": gate_number,
+                                    "run_id": run_id,
+                                    "platform": "x",
+                                },
+                            },
+                        },
+                    ],
+                }
+            ]
+        }
+
+        return self._post_message(message, props=props, file_ids=file_ids)
+
+    # ================================================================
     # Send approval request
     # ================================================================
 

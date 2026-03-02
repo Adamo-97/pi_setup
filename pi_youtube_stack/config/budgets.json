@@ -1,0 +1,41 @@
+{
+  "version": 1,
+  "total_weekly_units": 5000,
+  "platforms": {
+    "youtube": {
+      "weekly_units": 2000,
+      "priority": 1,
+      "enabled": true
+    },
+    "tiktok": {
+      "weekly_units": 1000,
+      "priority": 2,
+      "enabled": true
+    },
+    "instagram": {
+      "weekly_units": 1000,
+      "priority": 3,
+      "enabled": true
+    },
+    "x": {
+      "weekly_units": 1000,
+      "priority": 4,
+      "enabled": true
+    }
+  },
+  "api_costs": {
+    "gemini_script": 50,
+    "gemini_validate": 30,
+    "gemini_metadata": 20,
+    "gemini_clip_plan": 15,
+    "gemini_planner": 25,
+    "gemini_embedding": 5,
+    "elevenlabs_per_minute": 100,
+    "rawg_fetch": 2,
+    "serpapi_search": 10
+  },
+  "alerts": {
+    "warn_at_percent": 80,
+    "critical_at_percent": 95
+  }
+}

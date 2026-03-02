@@ -38,7 +38,6 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
 from agents.validator_agent import ValidatorAgent
-from services.mattermost_service import MattermostService
 from database.connection import execute_query
 
 # ---------------------------------------------------------------------------
@@ -152,42 +151,12 @@ def main():
         )
 
         # ------------------------------------------------------------------
-        # Send to Mattermost if approved (Step 1 of approval flow)
+        # Gate 2 approval is now handled by n8n workflow (6-Gate HITL).
+        # This script only outputs JSON to stdout for n8n to parse.
         # ------------------------------------------------------------------
-        mattermost_sent = False
-        if result.get("approved") and not args.skip_notify:
-            try:
-                mm = MattermostService()
-                mattermost_sent = mm.send_script_for_approval(
-                    script_id=script_id,
-                    content_type=content_type,
-                    title=title,
-                    script_text=result.get("final_script", script_text),
-                    validation_summary=result.get("summary", ""),
-                    overall_score=result.get("overall_score", 0),
-                    game_count=len(games_data),
-                    pipeline_run_id=pipeline_run_id,
-                )
-                logger.info("Mattermost script approval sent: %s", mattermost_sent)
-            except Exception as exc:
-                logger.error("Failed to send Mattermost notification: %s", exc)
 
-        elif not result.get("approved"):
-            # Notify about rejection
-            try:
-                mm = MattermostService()
-                mm.send_notification(
-                    f"❌ سكريبت '{title}' رُفض بواسطة الـ AI.\n"
-                    f"التقييم: {result.get('overall_score', 0)}/100\n"
-                    f"السبب: {result.get('summary', 'N/A')}",
-                    emoji=":no_entry_sign:",
-                )
-            except Exception:
-                pass
-
-        # Add success flag and notification status
+        # Add success flag
         result["success"] = True
-        result["mattermost_sent"] = mattermost_sent
         result["title"] = title
 
     except Exception as exc:

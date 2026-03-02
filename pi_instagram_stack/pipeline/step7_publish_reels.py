@@ -23,7 +23,6 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from config.settings import get_settings
 from database.connection import execute_query
 from services.buffer_service import BufferService
-from services.mattermost_service import MattermostService
 
 logging.basicConfig(
     level=logging.INFO,
@@ -74,15 +73,18 @@ def main(video_id: str, mode: str = "notify") -> dict:
         raise FileNotFoundError(f"Video file missing: {video_path}")
 
     if mode == "notify":
-        return _send_approval(
-            video_id=video_id,
-            script_id=script_id,
-            script_text=script_text,
-            content_type=content_type,
-            duration=duration,
-            video_path=video_path,
-            settings=settings,
-        )
+        # Gate 5 approval is now handled by n8n workflow (6-Gate HITL).
+        # In notify mode, just output video info for n8n to parse.
+        result = {
+            "video_id": video_id,
+            "mode": "notify",
+            "video_path": video_path,
+            "duration": duration,
+            "content_type": content_type,
+            "ready_for_approval": True,
+        }
+        print(json.dumps(result, ensure_ascii=False))
+        return result
     elif mode == "publish":
         return _publish_to_buffer(
             video_id=video_id,
@@ -93,76 +95,6 @@ def main(video_id: str, mode: str = "notify") -> dict:
         )
     else:
         raise ValueError(f"Unknown mode: {mode}")
-
-
-def _send_approval(
-    video_id: str,
-    script_id: str,
-    script_text: str,
-    content_type: str,
-    duration: float,
-    video_path: str,
-    settings,
-) -> dict:
-    """Send Mattermost approval request."""
-    mm = MattermostService(
-        url=settings.mattermost.url,
-        bot_token=settings.mattermost.bot_token,
-        channel_id=settings.mattermost.channel_id,
-        n8n_base_url=f"http://localhost:{settings.n8n.port}",
-    )
-
-    # Get validation score
-    val_rows = execute_query(
-        "SELECT overall_score FROM validations WHERE script_id = %s ORDER BY created_at DESC LIMIT 1",
-        (script_id,),
-        fetch=True,
-    )
-    validation_score = val_rows[0][0] if val_rows else 0
-
-    # Get news titles
-    news_rows = execute_query(
-        """
-        SELECT na.title FROM news_articles na
-        JOIN generated_scripts gs ON na.id = ANY(gs.news_ids)
-        WHERE gs.id = %s
-        """,
-        (script_id,),
-        fetch=True,
-    )
-    news_titles = [r[0] for r in news_rows] if news_rows else []
-
-    success = mm.send_approval_request(
-        script_id=script_id,
-        video_id=video_id,
-        script_text=script_text,
-        content_type=content_type,
-        validation_score=validation_score,
-        video_path=video_path,
-        duration=duration,
-        news_titles=news_titles,
-    )
-
-    # Update status
-    execute_query(
-        "UPDATE rendered_videos SET status = 'pending_approval', updated_at = NOW() WHERE id = %s",
-        (video_id,),
-    )
-
-    result = {
-        "video_id": video_id,
-        "mode": "notify",
-        "mattermost_sent": success,
-        "validation_score": validation_score,
-    }
-
-    logger.info(
-        "Mattermost approval sent: %s (score: %d)",
-        "✅" if success else "❌",
-        validation_score,
-    )
-    print(json.dumps(result, ensure_ascii=False))
-    return result
 
 
 def _publish_to_buffer(
@@ -207,22 +139,6 @@ def _publish_to_buffer(
             """,
             (pub_result.get("update_id", ""), video_id),
         )
-
-        # Send Mattermost confirmation
-        try:
-            mm = MattermostService(
-                url=settings.mattermost.url,
-                bot_token=settings.mattermost.bot_token,
-                channel_id=settings.mattermost.channel_id,
-                n8n_base_url=f"http://localhost:{settings.n8n.port}",
-            )
-            mm.send_publish_confirmation(
-                video_id=video_id,
-                buffer_update_id=pub_result.get("update_id", "unknown"),
-                title=caption[:50],
-            )
-        except Exception:
-            pass
     else:
         execute_query(
             "UPDATE rendered_videos SET status = 'publish_failed', updated_at = NOW() WHERE id = %s",

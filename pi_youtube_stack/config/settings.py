@@ -115,6 +115,38 @@ class MattermostConfig:
 
 
 @dataclass(frozen=True)
+class RedisConfig:
+    """Redis rate-limiting & budget cache configuration."""
+
+    url: str
+    max_memory: str
+    ttl_seconds: int  # 7-day TTL for budget keys
+
+
+@dataclass(frozen=True)
+class BudgetConfig:
+    """Nextcloud-hosted budgets.json injection."""
+
+    nextcloud_url: str
+    nextcloud_user: str
+    nextcloud_password: str
+    nextcloud_path: str
+    local_fallback_path: str
+    cache_ttl_seconds: int  # Redis cache TTL for budget data
+
+
+@dataclass(frozen=True)
+class SharedRAWGConfig:
+    """Read-only connection to the shared RAWG PostgreSQL cache."""
+
+    host: str
+    port: int
+    database: str
+    user: str
+    password: str
+
+
+@dataclass(frozen=True)
 class N8NConfig:
     """n8n connection details (for callback webhooks)."""
 
@@ -212,6 +244,41 @@ def _build_n8n() -> N8NConfig:
     )
 
 
+def _build_redis() -> RedisConfig:
+    return RedisConfig(
+        url=os.getenv("REDIS_URL", "redis://localhost:6379"),
+        max_memory=os.getenv("REDIS_MAX_MEMORY", "64mb"),
+        ttl_seconds=int(os.getenv("REDIS_BUDGET_TTL", "604800")),  # 7 days
+    )
+
+
+def _build_budget() -> BudgetConfig:
+    return BudgetConfig(
+        nextcloud_url=os.getenv("NEXTCLOUD_URL", "http://192.168.1.100:8080"),
+        nextcloud_user=os.getenv("NEXTCLOUD_USER", ""),
+        nextcloud_password=os.getenv("NEXTCLOUD_PASSWORD", ""),
+        nextcloud_path=os.getenv(
+            "NEXTCLOUD_BUDGETS_PATH",
+            "/remote.php/dav/files/admin/pi_config/budgets.json",
+        ),
+        local_fallback_path=os.getenv(
+            "BUDGETS_LOCAL_PATH",
+            str(PROJECT_ROOT / "config" / "budgets.json"),
+        ),
+        cache_ttl_seconds=int(os.getenv("BUDGET_CACHE_TTL", "3600")),  # 1 hour
+    )
+
+
+def _build_shared_rawg() -> SharedRAWGConfig:
+    return SharedRAWGConfig(
+        host=os.getenv("SHARED_RAWG_HOST", "192.168.1.100"),
+        port=int(os.getenv("SHARED_RAWG_PORT", "5433")),
+        database=os.getenv("SHARED_RAWG_DB", "youtube_rag"),
+        user=os.getenv("SHARED_RAWG_USER", "yt_readonly"),
+        password=os.getenv("SHARED_RAWG_PASSWORD", "readonly_pass_2025"),
+    )
+
+
 def _build_paths() -> PathsConfig:
     root = PROJECT_ROOT
     paths = PathsConfig(
@@ -297,6 +364,9 @@ class _Settings:
         self._mattermost = None
         self._n8n = None
         self._paths = None
+        self._redis = None
+        self._budget = None
+        self._shared_rawg = None
 
     @property
     def gemini(self) -> GeminiConfig:
@@ -339,6 +409,24 @@ class _Settings:
         if self._paths is None:
             self._paths = _build_paths()
         return self._paths
+
+    @property
+    def redis(self) -> RedisConfig:
+        if self._redis is None:
+            self._redis = _build_redis()
+        return self._redis
+
+    @property
+    def budget(self) -> BudgetConfig:
+        if self._budget is None:
+            self._budget = _build_budget()
+        return self._budget
+
+    @property
+    def shared_rawg(self) -> SharedRAWGConfig:
+        if self._shared_rawg is None:
+            self._shared_rawg = _build_shared_rawg()
+        return self._shared_rawg
 
 
 # Global settings instance — usage: `from config.settings import settings`
