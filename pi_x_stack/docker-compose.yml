@@ -42,7 +42,7 @@ services:
       - "5681:5678"
     environment:
       - N8N_PORT=5678
-      - GENERIC_TIMEZONE=Asia/Riyadh
+      - GENERIC_TIMEZONE=Europe/Stockholm
       - N8N_SECURE_COOKIE=false
       - NODE_FUNCTION_ALLOW_EXTERNAL=*
     volumes:

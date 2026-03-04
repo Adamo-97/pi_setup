@@ -29,7 +29,7 @@ services:
       POSTGRES_DB: ${POSTGRES_DB:-mattermost}
       POSTGRES_USER: ${POSTGRES_USER:-mm_user}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
-      TZ: ${TZ:-Asia/Riyadh}
+      TZ: ${TZ:-Europe/Stockholm}
     ports:
       - "${POSTGRES_PORT:-5438}:5432"
     volumes:
@@ -65,7 +65,7 @@ services:
     restart: unless-stopped
     environment:
       # ── Timezone ──
-      TZ: ${TZ:-Asia/Riyadh}
+      TZ: ${TZ:-Europe/Stockholm}
 
       # ── Database Connection ──
       MM_SQLSETTINGS_DRIVERNAME: postgres
