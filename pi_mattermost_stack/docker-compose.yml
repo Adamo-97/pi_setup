@@ -34,7 +34,7 @@ services:
       - "${POSTGRES_PORT:-5438}:5432"
     volumes:
       # Database on NVMe for fast I/O
-      - ${NVME_MOUNT:-/mnt/nvme}/mattermost/db:/var/lib/postgresql/data
+      - ${NVME_MOUNT:-/opt}/mattermost/db:/var/lib/postgresql/data
     healthcheck:
       test:
         [
@@ -61,6 +61,7 @@ services:
   # --------------------------------------------------------------------------
   mattermost:
     image: mattermost/mattermost-team-edition:latest
+    platform: linux/amd64   # AMD64-only image; runs via QEMU on ARM64 Pi
     container_name: mattermost
     restart: unless-stopped
     environment:
@@ -76,9 +77,9 @@ services:
       MM_SERVICESETTINGS_SITEURL: ${MM_SITEURL:-http://192.168.1.100:8065}
       MM_SERVICESETTINGS_LISTENADDRESS: ":8065"
 
-      # ── Mobile Push Notifications (Free TPNS) ──
+      # ── Mobile Push Notifications (Self-Hosted Proxy) ──
       MM_EMAILSETTINGS_SENDPUSHNOTIFICATIONS: "true"
-      MM_EMAILSETTINGS_PUSHNOTIFICATIONSERVER: "https://push-test.mattermost.com"
+      MM_EMAILSETTINGS_PUSHNOTIFICATIONSERVER: "http://push-proxy:8066"
       MM_EMAILSETTINGS_PUSHNOTIFICATIONCONTENTS: "id_loaded"
 
       # ── Bot & Integration Settings ──
@@ -110,30 +111,57 @@ services:
       - "${MATTERMOST_PORT:-8065}:8065"
     volumes:
       # Mattermost data, config, logs, plugins on NVMe
-      - ${NVME_MOUNT:-/mnt/nvme}/mattermost/data:/mattermost/data
-      - ${NVME_MOUNT:-/mnt/nvme}/mattermost/config:/mattermost/config
-      - ${NVME_MOUNT:-/mnt/nvme}/mattermost/logs:/mattermost/logs
-      - ${NVME_MOUNT:-/mnt/nvme}/mattermost/plugins:/mattermost/plugins
-      - ${NVME_MOUNT:-/mnt/nvme}/mattermost/client-plugins:/mattermost/client/plugins
+      - ${NVME_MOUNT:-/opt}/mattermost/data:/mattermost/data
+      - ${NVME_MOUNT:-/opt}/mattermost/config:/mattermost/config
+      - ${NVME_MOUNT:-/opt}/mattermost/logs:/mattermost/logs
+      - ${NVME_MOUNT:-/opt}/mattermost/plugins:/mattermost/plugins
+      - ${NVME_MOUNT:-/opt}/mattermost/client-plugins:/mattermost/client/plugins
     depends_on:
       postgres_mattermost:
         condition: service_healthy
+      push-proxy:
+        condition: service_started
     healthcheck:
-      test:
-        [
-          "CMD-SHELL",
-          "curl -sf http://localhost:8065/api/v4/system/ping || exit 1",
-        ]
+      # Distroless AMD64 image under QEMU: only the mattermost binary is available.
+      # 'db migrate' exits 0 when DB is up-to-date (no migrations needed).
+      test: ["CMD", "/mattermost/bin/mattermost", "db", "migrate"]
       interval: 30s
-      timeout: 10s
-      retries: 5
-      start_period: 60s
+      timeout: 20s
+      retries: 3
+      start_period: 90s
     networks:
       - mattermost_net
     deploy:
       resources:
         limits:
           memory: 1024M
+
+  # --------------------------------------------------------------------------
+  # Mattermost Self-Hosted Push Proxy
+  # --------------------------------------------------------------------------
+  # Relays push notifications from Mattermost → Apple APNs & Google FCM.
+  # Requires:
+  #   • /opt/mattermost/push-proxy/config/push-proxy.json  (edit credentials)
+  #   • /opt/mattermost/push-proxy/certs/apple.pem         (Apple Developer cert)
+  # See config/push-proxy.json.example and README.md → PUSH PROXY SETUP.
+  # --------------------------------------------------------------------------
+  push-proxy:
+    image: mattermost/mattermost-push-proxy:latest
+    container_name: mattermost-push-proxy
+    restart: unless-stopped
+    environment:
+      TZ: ${TZ:-Europe/Stockholm}
+    ports:
+      - "${PUSH_PROXY_PORT:-8066}:8066"
+    volumes:
+      - ${NVME_MOUNT:-/opt}/mattermost/push-proxy/config/mattermost-push-proxy.json:/mattermost-push-proxy/mattermost-push-proxy.json:ro
+      - ${NVME_MOUNT:-/opt}/mattermost/push-proxy/certs:/certs:ro
+    networks:
+      - mattermost_net
+    deploy:
+      resources:
+        limits:
+          memory: 128M
 
 # ----------------------------------------------------------------------------
 # Network — isolated bridge for the Mattermost stack
