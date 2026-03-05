@@ -346,7 +346,7 @@
     },
     {
       "parameters": {
-        "command": "={{ 'cd /home/node/instagram_stack && python -m pipeline.step6_assemble_video --script-id ' + $json.script_id + ' --run-id ' + $json.run_id }}"
+        "command": "={{ 'cd /home/node/instagram_stack && python -m pipeline.step6_assemble_video --script-id ' + $(\"Parse Footage\").first().json.script_id + ' --voiceover-id ' + $(\"Parse Voiceover\").first().json.voiceover_id + ' --footage-id ' + $(\"Parse Footage\").first().json.footage_id }}"
       },
       "id": "ig-step6",
       "name": "6. Assemble Video",
@@ -398,7 +398,7 @@
     },
     {
       "parameters": {
-        "command": "={{ 'cd /home/node/instagram_stack && python -m pipeline.step7_publish --mode publish --run-id ' + $json.run_id }}"
+        "command": "={{ 'cd /home/node/instagram_stack && python -m pipeline.step7_publish_reels --video-id ' + $(\"Parse Video\").first().json.video_id + ' --mode publish' }}"
       },
       "id": "ig-step7",
       "name": "7. Publish",
@@ -411,7 +411,7 @@
     },
     {
       "parameters": {
-        "command": "={{ 'cd /home/node/instagram_stack && python -m pipeline.step8_update_rag --run-id ' + $json.run_id }}"
+        "command": "={{ 'cd /home/node/instagram_stack && python -m pipeline.step8_update_rag --video-id ' + $(\"Parse Video\").first().json.video_id }}"
       },
       "id": "ig-step8",
       "name": "8. Update RAG",

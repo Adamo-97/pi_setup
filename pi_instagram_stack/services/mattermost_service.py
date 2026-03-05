@@ -13,6 +13,7 @@ Mattermost API Reference:
 """
 
 import logging
+import os
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -29,12 +30,14 @@ class MattermostService:
         url: str,
         bot_token: str,
         channel_id: str,
-        n8n_base_url: str = "http://192.168.0.11:5678",
+        n8n_base_url: str = "",
     ):
         self.base_url = url.rstrip("/")
         self.bot_token = bot_token
         self.channel_id = channel_id
-        self.n8n_base_url = n8n_base_url.rstrip("/")
+        # Allow override via N8N_BASE_URL env var; fallback to Pi's shared n8n
+        resolved = n8n_base_url or os.environ.get("N8N_BASE_URL", "http://192.168.0.11:5678")
+        self.n8n_base_url = resolved.rstrip("/")
         self._headers = {
             "Authorization": f"Bearer {self.bot_token}",
             "Content-Type": "application/json",

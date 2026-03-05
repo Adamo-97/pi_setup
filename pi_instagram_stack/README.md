@@ -209,7 +209,7 @@ mkdir -p output/{videos,voiceovers,scripts,subtitles,temp} footage
 docker compose up -d
 
 # 5. Import n8n workflow
-# Open http://<pi-ip>:5680
+# Open http://<pi-ip>:5678  (shared n8n from pi_n8n_stack)
 # Import → n8n_workflow.json
 ```
 
@@ -288,7 +288,7 @@ pi_instagram_stack/
 | Service              | Image                    | Port   | Memory | Purpose                      |
 | -------------------- | ------------------------ | ------ | ------ | ---------------------------- |
 | `postgres_instagram` | `pgvector/pgvector:pg16` | `5435` | 512 MB | Database + vector embeddings |
-| `n8n_instagram`      | `n8nio/n8n:latest`       | `5680` | 512 MB | Workflow orchestration       |
+| `n8n_instagram`      | Shared `pi_n8n_stack`      | `5678` | 768 MB | Workflow orchestration       |
 | `redis_instagram`    | `redis:7-alpine`         | `6381` | 64 MB  | Rate limiting + budget cache |
 
 All containers run on an isolated Docker bridge network `instagram_stack_net`.
@@ -309,7 +309,7 @@ All containers run on an isolated Docker bridge network `instagram_stack_net`.
 | `voiceovers`        | ElevenLabs audio + word_timestamps JSONB              |
 | `video_footage`     | Downloaded clips (YouTube/local)                      |
 | `rendered_videos`   | Final videos + Buffer publish status                  |
-| `rag_embeddings`    | 768-dim vectors with HNSW index                       |
+| `rag_embeddings`    | 3072-dim vectors (gemini-embedding-001), sequential scan |
 | `feedback_log`      | User/auto feedback for RAG context                    |
 | `pipeline_runs`     | Execution history and status                          |
 
@@ -395,7 +395,7 @@ python -m pipeline.step8_update_rag --video-id <UUID>
 
 ## n8n Workflow
 
-Import `n8n_workflow.json` into n8n at `http://<pi-ip>:5680`.
+Import `n8n_workflow.json` into n8n at `http://<pi-ip>:5678` (the shared `pi_n8n_stack` instance).
 
 The workflow implements the **6-Gate HITL** pattern: a single approve/reject webhook pair routes approvals to the correct gate via a Switch node.
 
@@ -413,7 +413,7 @@ The workflow implements the **6-Gate HITL** pattern: a single approve/reject web
 | Resource        | YouTube Stack       | TikTok Stack       | Instagram Stack       |
 | --------------- | ------------------- | ------------------ | --------------------- |
 | PostgreSQL port | 5433                | 5434               | **5435**              |
-| n8n port        | 5678                | 5679               | **5680**              |
+| n8n port        | 5678 (shared)       | 5678 (shared)      | **5678 (shared)**     |
 | Docker network  | `youtube_stack_net` | `tiktok_stack_net` | `instagram_stack_net` |
 | Database name   | `youtube_rag`       | `tiktok_rag`       | `instagram_rag`       |
 | DB user         | `yt_user`           | `tt_user`          | `ig_user`             |
