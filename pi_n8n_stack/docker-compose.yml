@@ -19,6 +19,7 @@ services:
     build:
       context: ..
       dockerfile: pi_n8n_stack/Dockerfile
+      network: host
     image: n8n-python:local
     container_name: n8n
     restart: unless-stopped
