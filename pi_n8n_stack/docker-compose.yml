@@ -1,0 +1,90 @@
+# ============================================================================
+# pi_n8n_stack — Shared n8n Workflow Engine
+# ============================================================================
+# Single n8n instance serving all content pipelines:
+#   Instagram, TikTok, X/Twitter, YouTube
+#
+# Each pipeline stack exposes its Docker network so n8n can reach
+# postgres/redis containers by hostname (e.g., postgres_instagram).
+#
+# Usage:
+#   1. Start at least one pipeline stack first (so its network exists)
+#   2. docker compose up -d
+#   3. Open http://<pi-ip>:5678
+#   4. Import each pipeline's n8n_workflow.json
+# ============================================================================
+
+services:
+  n8n:
+    image: n8nio/n8n:latest
+    container_name: n8n
+    restart: unless-stopped
+    environment:
+      # --- Auth ---------------------------------------------------------------
+      N8N_BASIC_AUTH_ACTIVE: "true"
+      N8N_BASIC_AUTH_USER: ${N8N_BASIC_AUTH_USER:-admin}
+      N8N_BASIC_AUTH_PASSWORD: ${N8N_BASIC_AUTH_PASSWORD:?N8N_BASIC_AUTH_PASSWORD is required}
+      N8N_ENCRYPTION_KEY: ${N8N_ENCRYPTION_KEY:?N8N_ENCRYPTION_KEY is required}
+      # --- Core ---------------------------------------------------------------
+      N8N_PORT: "5678"
+      WEBHOOK_URL: ${N8N_WEBHOOK_URL:-http://localhost:5678}
+      GENERIC_TIMEZONE: ${TZ:-Europe/Stockholm}
+      TZ: ${TZ:-Europe/Stockholm}
+      N8N_SECURE_COOKIE: "false"
+      N8N_PROCESS_MODE: main
+      EXECUTIONS_MODE: regular
+      NODE_FUNCTION_ALLOW_EXTERNAL: "*"
+      N8N_ALLOW_EXEC: "true"
+      # --- Execution settings -------------------------------------------------
+      EXECUTIONS_DATA_SAVE_ON_ERROR: all
+      EXECUTIONS_DATA_SAVE_ON_SUCCESS: all
+      EXECUTIONS_DATA_SAVE_MANUAL_EXECUTIONS: "true"
+    ports:
+      - "5678:5678"
+    volumes:
+      # Persistent n8n data (workflows, credentials, sqlite db)
+      - n8n_data:/home/node/.n8n
+      # Mount each pipeline stack (read-only code, read-write output)
+      - ../pi_instagram_stack:/home/node/instagram_stack:ro
+      - ../pi_instagram_stack/output:/home/node/instagram_stack/output:rw
+      - ../pi_tiktok_stack:/home/node/tiktok_stack:ro
+      - ../pi_tiktok_stack/output:/home/node/tiktok_stack/output:rw
+      - ../pi_x_stack:/home/node/x_stack:ro
+      - ../pi_x_stack/output:/home/node/x_stack/output:rw
+      - ../pi_youtube_stack:/home/node/youtube_stack:ro
+      - ../pi_youtube_stack/output:/home/node/youtube_stack/output:rw
+    networks:
+      - n8n_net
+      - instagram_stack_net
+      # Uncomment each when you deploy that stack:
+      # - tiktok_stack_net
+      # - x_stack_net
+      # - youtube_stack_net
+    deploy:
+      resources:
+        limits:
+          memory: 768M
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:5678/healthz || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+volumes:
+  n8n_data:
+    driver: local
+
+# External networks — created by each pipeline's docker-compose
+networks:
+  n8n_net:
+    driver: bridge
+  instagram_stack_net:
+    external: true
+  # Uncomment each when you deploy that stack:
+  # tiktok_stack_net:
+  #   external: true
+  # x_stack_net:
+  #   external: true
+  # youtube_stack_net:
+  #   external: true

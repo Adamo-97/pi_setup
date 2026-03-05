@@ -84,4 +84,5 @@ volumes:
 
 networks:
   tiktok_stack_net:
+    name: tiktok_stack_net
     driver: bridge

@@ -1,5 +1,12 @@
 version: "3.8"
 
+# =============================================================
+# pi_instagram_stack — Docker Compose
+# =============================================================
+# PostgreSQL (pgvector) + Redis for the Instagram Reels pipeline.
+# n8n is provided by the shared pi_n8n_stack (see ../pi_n8n_stack).
+# =============================================================
+
 services:
   postgres_instagram:
     image: pgvector/pgvector:pg16
@@ -19,31 +26,6 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
-    deploy:
-      resources:
-        limits:
-          memory: 512M
-    networks:
-      - instagram_stack_net
-
-  n8n_instagram:
-    image: n8nio/n8n:latest
-    container_name: n8n_instagram
-    restart: unless-stopped
-    environment:
-      - N8N_PORT=5680
-      - WEBHOOK_URL=http://localhost:5680/
-      - GENERIC_TIMEZONE=Europe/Stockholm
-      - TZ=Europe/Stockholm
-    ports:
-      - "5680:5680"
-    volumes:
-      - n8n_instagram_data:/home/node/.n8n
-      - .:/home/node/project:ro
-      - ./output:/home/node/project/output:rw
-    depends_on:
-      postgres_instagram:
-        condition: service_healthy
     deploy:
       resources:
         limits:
@@ -79,9 +61,9 @@ services:
 
 volumes:
   pgdata_instagram:
-  n8n_instagram_data:
   redis_instagram_data:
 
 networks:
   instagram_stack_net:
+    name: instagram_stack_net
     driver: bridge

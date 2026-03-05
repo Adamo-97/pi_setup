@@ -90,4 +90,5 @@ volumes:
 
 networks:
   x_stack_net:
+    name: x_stack_net
     driver: bridge

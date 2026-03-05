@@ -36,7 +36,7 @@
     },
     {
       "parameters": {
-        "command": "cd /home/node/project && python -c \"from agents.planner_agent import PlannerAgent; import json; p = PlannerAgent(); print(json.dumps(p.run()))\""
+        "command": "cd /home/node/tiktok_stack && python -c \"from agents.planner_agent import PlannerAgent; import json; p = PlannerAgent(); print(json.dumps(p.run()))\""
       },
       "id": "tt-step0",
       "name": "0. Generate Plan",
@@ -56,7 +56,7 @@
     },
     {
       "parameters": {
-        "command": "={{ 'cd /home/node/project && python -c \"from services.mattermost_service import MattermostService; import os; mm = MattermostService(os.environ[\\\"MATTERMOST_URL\\\"], os.environ[\\\"MATTERMOST_BOT_TOKEN\\\"], os.environ[\\\"MATTERMOST_CHANNEL_ID\\\"]); mm.send_gate_approval(0, \\\"خطة تيك توك جديدة\\\", {\\\"الموضوع\\\": \\\"' + ($json.proposed_topic || '').replace(/\"/g, '') + '\\\", \\\"النوع\\\": \\\"' + ($json.proposed_content_type || '') + '\\\"}, \\\"' + $json.run_id + '\\\", budget_status=\\\"' + ($json.budget_status || '') + '\\\")\"' }}"
+        "command": "={{ 'cd /home/node/tiktok_stack && python -c \"from services.mattermost_service import MattermostService; import os; mm = MattermostService(os.environ[\\\"MATTERMOST_URL\\\"], os.environ[\\\"MATTERMOST_BOT_TOKEN\\\"], os.environ[\\\"MATTERMOST_CHANNEL_ID\\\"]); mm.send_gate_approval(0, \\\"خطة تيك توك جديدة\\\", {\\\"الموضوع\\\": \\\"' + ($json.proposed_topic || '').replace(/\"/g, '') + '\\\", \\\"النوع\\\": \\\"' + ($json.proposed_content_type || '') + '\\\"}, \\\"' + $json.run_id + '\\\", budget_status=\\\"' + ($json.budget_status || '') + '\\\")\"' }}"
       },
       "id": "tt-gate0",
       "name": "Gate 0: Plan Approval",
@@ -124,7 +124,7 @@
     },
     {
       "parameters": {
-        "command": "={{ 'cd /home/node/project && python -m pipeline.step1_scrape_news --source all --run-id ' + $json.run_id }}"
+        "command": "={{ 'cd /home/node/tiktok_stack && python -m pipeline.step1_scrape_news --source all --run-id ' + $json.run_id }}"
       },
       "id": "tt-step1",
       "name": "1. Scrape News",
@@ -144,7 +144,7 @@
     },
     {
       "parameters": {
-        "command": "={{ 'cd /home/node/project && python -c \"from services.mattermost_service import MattermostService; import os; mm = MattermostService(os.environ[\\\"MATTERMOST_URL\\\"], os.environ[\\\"MATTERMOST_BOT_TOKEN\\\"], os.environ[\\\"MATTERMOST_CHANNEL_ID\\\"]); mm.send_gate_approval(1, \\\"تم جمع الأخبار بنجاح\\\", {\\\"المصادر\\\": \\\"RSS + Google + Reddit\\\"}, \\\"' + $json.run_id + '\\\")\"' }}"
+        "command": "={{ 'cd /home/node/tiktok_stack && python -c \"from services.mattermost_service import MattermostService; import os; mm = MattermostService(os.environ[\\\"MATTERMOST_URL\\\"], os.environ[\\\"MATTERMOST_BOT_TOKEN\\\"], os.environ[\\\"MATTERMOST_CHANNEL_ID\\\"]); mm.send_gate_approval(1, \\\"تم جمع الأخبار بنجاح\\\", {\\\"المصادر\\\": \\\"RSS + Google + Reddit\\\"}, \\\"' + $json.run_id + '\\\")\"' }}"
       },
       "id": "tt-gate1",
       "name": "Gate 1: News Approval",
@@ -155,7 +155,7 @@
     },
     {
       "parameters": {
-        "command": "={{ 'cd /home/node/project && python -m pipeline.step2_generate_script --type trending_news --duration 45 --run-id ' + $json.run_id }}"
+        "command": "={{ 'cd /home/node/tiktok_stack && python -m pipeline.step2_generate_script --type trending_news --duration 45 --run-id ' + $json.run_id }}"
       },
       "id": "tt-step2",
       "name": "2. Generate Script",
@@ -175,7 +175,7 @@
     },
     {
       "parameters": {
-        "command": "={{ 'cd /home/node/project && python -m pipeline.step3_validate_script --script-id ' + $json.script_id + ' --run-id ' + $json.run_id }}"
+        "command": "={{ 'cd /home/node/tiktok_stack && python -m pipeline.step3_validate_script --script-id ' + $json.script_id + ' --run-id ' + $json.run_id }}"
       },
       "id": "tt-step3",
       "name": "3. Validate Script",
@@ -195,7 +195,7 @@
     },
     {
       "parameters": {
-        "command": "={{ 'cd /home/node/project && python -c \"from services.mattermost_service import MattermostService; import os; mm = MattermostService(os.environ[\\\"MATTERMOST_URL\\\"], os.environ[\\\"MATTERMOST_BOT_TOKEN\\\"], os.environ[\\\"MATTERMOST_CHANNEL_ID\\\"]); mm.send_gate_approval(2, \\\"السكريبت جاهز — تقييم: ' + ($json.overall_score || 0) + '/100\\\", {\\\"التقييم\\\": \\\"' + ($json.overall_score || 0) + '/100\\\", \\\"ID\\\": \\\"' + ($json.script_id || '') + '\\\"}, \\\"' + $json.run_id + '\\\")\"' }}"
+        "command": "={{ 'cd /home/node/tiktok_stack && python -c \"from services.mattermost_service import MattermostService; import os; mm = MattermostService(os.environ[\\\"MATTERMOST_URL\\\"], os.environ[\\\"MATTERMOST_BOT_TOKEN\\\"], os.environ[\\\"MATTERMOST_CHANNEL_ID\\\"]); mm.send_gate_approval(2, \\\"السكريبت جاهز — تقييم: ' + ($json.overall_score || 0) + '/100\\\", {\\\"التقييم\\\": \\\"' + ($json.overall_score || 0) + '/100\\\", \\\"ID\\\": \\\"' + ($json.script_id || '') + '\\\"}, \\\"' + $json.run_id + '\\\")\"' }}"
       },
       "id": "tt-gate2",
       "name": "Gate 2: Script Approval",
@@ -206,7 +206,7 @@
     },
     {
       "parameters": {
-        "command": "={{ 'cd /home/node/project && python -m pipeline.step4_generate_voiceover --script-id ' + $json.script_id + ' --run-id ' + $json.run_id }}"
+        "command": "={{ 'cd /home/node/tiktok_stack && python -m pipeline.step4_generate_voiceover --script-id ' + $json.script_id + ' --run-id ' + $json.run_id }}"
       },
       "id": "tt-step4",
       "name": "4. Generate Voiceover",
@@ -226,7 +226,7 @@
     },
     {
       "parameters": {
-        "command": "={{ 'cd /home/node/project && python -c \"from services.mattermost_service import MattermostService; import os; mm = MattermostService(os.environ[\\\"MATTERMOST_URL\\\"], os.environ[\\\"MATTERMOST_BOT_TOKEN\\\"], os.environ[\\\"MATTERMOST_CHANNEL_ID\\\"]); mm.send_gate_approval(3, \\\"التعليق الصوتي جاهز\\\", {\\\"المدة\\\": \\\"' + ($json.duration_seconds || 0) + 's\\\"}, \\\"' + $json.run_id + '\\\")\"' }}"
+        "command": "={{ 'cd /home/node/tiktok_stack && python -c \"from services.mattermost_service import MattermostService; import os; mm = MattermostService(os.environ[\\\"MATTERMOST_URL\\\"], os.environ[\\\"MATTERMOST_BOT_TOKEN\\\"], os.environ[\\\"MATTERMOST_CHANNEL_ID\\\"]); mm.send_gate_approval(3, \\\"التعليق الصوتي جاهز\\\", {\\\"المدة\\\": \\\"' + ($json.duration_seconds || 0) + 's\\\"}, \\\"' + $json.run_id + '\\\")\"' }}"
       },
       "id": "tt-gate3",
       "name": "Gate 3: Voiceover Approval",
@@ -237,7 +237,7 @@
     },
     {
       "parameters": {
-        "command": "={{ 'cd /home/node/project && python -m pipeline.step5_download_footage --script-id ' + $json.script_id + ' --run-id ' + $json.run_id }}"
+        "command": "={{ 'cd /home/node/tiktok_stack && python -m pipeline.step5_download_footage --script-id ' + $json.script_id + ' --run-id ' + $json.run_id }}"
       },
       "id": "tt-step5",
       "name": "5. Download Footage",
@@ -257,7 +257,7 @@
     },
     {
       "parameters": {
-        "command": "={{ 'cd /home/node/project && python -m pipeline.step6_assemble_video --script-id ' + $json.script_id + ' --voiceover-id ' + ($json.voiceover_id || '') + ' --footage-id ' + ($json.footage_id || '') + ' --run-id ' + $json.run_id }}"
+        "command": "={{ 'cd /home/node/tiktok_stack && python -m pipeline.step6_assemble_video --script-id ' + $json.script_id + ' --voiceover-id ' + ($json.voiceover_id || '') + ' --footage-id ' + ($json.footage_id || '') + ' --run-id ' + $json.run_id }}"
       },
       "id": "tt-step6",
       "name": "6. Assemble Video",
@@ -277,7 +277,7 @@
     },
     {
       "parameters": {
-        "command": "={{ 'cd /home/node/project && python -c \"from services.mattermost_service import MattermostService; import os; mm = MattermostService(os.environ[\\\"MATTERMOST_URL\\\"], os.environ[\\\"MATTERMOST_BOT_TOKEN\\\"], os.environ[\\\"MATTERMOST_CHANNEL_ID\\\"]); mm.send_gate_approval(4, \\\"الفيديو جاهز للمراجعة\\\", {\\\"الفيديو\\\": \\\"' + ($json.video_id || '') + '\\\"}, \\\"' + $json.run_id + '\\\")\"' }}"
+        "command": "={{ 'cd /home/node/tiktok_stack && python -c \"from services.mattermost_service import MattermostService; import os; mm = MattermostService(os.environ[\\\"MATTERMOST_URL\\\"], os.environ[\\\"MATTERMOST_BOT_TOKEN\\\"], os.environ[\\\"MATTERMOST_CHANNEL_ID\\\"]); mm.send_gate_approval(4, \\\"الفيديو جاهز للمراجعة\\\", {\\\"الفيديو\\\": \\\"' + ($json.video_id || '') + '\\\"}, \\\"' + $json.run_id + '\\\")\"' }}"
       },
       "id": "tt-gate4",
       "name": "Gate 4: Video Approval",
@@ -288,7 +288,7 @@
     },
     {
       "parameters": {
-        "command": "={{ 'cd /home/node/project && python -c \"from services.mattermost_service import MattermostService; import os; mm = MattermostService(os.environ[\\\"MATTERMOST_URL\\\"], os.environ[\\\"MATTERMOST_BOT_TOKEN\\\"], os.environ[\\\"MATTERMOST_CHANNEL_ID\\\"]); mm.send_gate_approval(5, \\\"جاهز للنشر — أرفق الصورة المصغرة كرد ثم وافق\\\", {\\\"المنصة\\\": \\\"TikTok\\\", \\\"الحالة\\\": \\\"جاهز\\\"}, \\\"' + $json.run_id + '\\\")\"' }}"
+        "command": "={{ 'cd /home/node/tiktok_stack && python -c \"from services.mattermost_service import MattermostService; import os; mm = MattermostService(os.environ[\\\"MATTERMOST_URL\\\"], os.environ[\\\"MATTERMOST_BOT_TOKEN\\\"], os.environ[\\\"MATTERMOST_CHANNEL_ID\\\"]); mm.send_gate_approval(5, \\\"جاهز للنشر — أرفق الصورة المصغرة كرد ثم وافق\\\", {\\\"المنصة\\\": \\\"TikTok\\\", \\\"الحالة\\\": \\\"جاهز\\\"}, \\\"' + $json.run_id + '\\\")\"' }}"
       },
       "id": "tt-gate5",
       "name": "Gate 5: Publish + Thumbnail",
@@ -299,7 +299,7 @@
     },
     {
       "parameters": {
-        "command": "={{ 'cd /home/node/project && python -m pipeline.step7_publish_tiktok --video-id ' + ($json.video_id || '') + ' --mode publish --run-id ' + $json.run_id }}"
+        "command": "={{ 'cd /home/node/tiktok_stack && python -m pipeline.step7_publish_tiktok --video-id ' + ($json.video_id || '') + ' --mode publish --run-id ' + $json.run_id }}"
       },
       "id": "tt-step7",
       "name": "7. Publish to Buffer",
@@ -309,7 +309,7 @@
     },
     {
       "parameters": {
-        "command": "={{ 'cd /home/node/project && python -m pipeline.step8_update_rag --run-id ' + $json.run_id }}"
+        "command": "={{ 'cd /home/node/tiktok_stack && python -m pipeline.step8_update_rag --run-id ' + $json.run_id }}"
       },
       "id": "tt-step8",
       "name": "8. Update RAG",

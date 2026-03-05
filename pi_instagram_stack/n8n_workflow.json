@@ -29,7 +29,7 @@
       "position": [450, 400]
     },
     {
-      "parameters": { "command": "cd /home/node/project && python -c \"from agents.planner_agent import PlannerAgent; import json; p = PlannerAgent(); print(json.dumps(p.run()))\"" },
+      "parameters": { "command": "cd /home/node/instagram_stack && python -c \"from agents.planner_agent import PlannerAgent; import json; p = PlannerAgent(); print(json.dumps(p.run()))\"" },
       "id": "ig-step0",
       "name": "0. Generate Plan",
       "type": "n8n-nodes-base.executeCommand",
@@ -48,7 +48,7 @@
     },
     {
       "parameters": {
-        "command": "={{ 'cd /home/node/project && python -c \"from services.mattermost_service import MattermostService; import os; mm = MattermostService(os.environ[\\\"MATTERMOST_URL\\\"], os.environ[\\\"MATTERMOST_BOT_TOKEN\\\"], os.environ[\\\"MATTERMOST_CHANNEL_ID\\\"]); mm.send_gate_approval(0, \\\"خطة Reel جديدة\\\", {\\\"الموضوع\\\": \\\"' + ($json.proposed_topic || '').replace(/\"/g, '') + '\\\", \\\"النوع\\\": \\\"' + ($json.proposed_content_type || '') + '\\\"}, \\\"' + $json.run_id + '\\\", budget_status=\\\"' + ($json.budget_status || '') + '\\\")\"' }}"
+        "command": "={{ 'cd /home/node/instagram_stack && python -c \"from services.mattermost_service import MattermostService; import os; mm = MattermostService(os.environ[\\\"MATTERMOST_URL\\\"], os.environ[\\\"MATTERMOST_BOT_TOKEN\\\"], os.environ[\\\"MATTERMOST_CHANNEL_ID\\\"]); mm.send_gate_approval(0, \\\"خطة Reel جديدة\\\", {\\\"الموضوع\\\": \\\"' + ($json.proposed_topic || '').replace(/\"/g, '') + '\\\", \\\"النوع\\\": \\\"' + ($json.proposed_content_type || '') + '\\\"}, \\\"' + $json.run_id + '\\\", budget_status=\\\"' + ($json.budget_status || '') + '\\\")\"' }}"
       },
       "id": "ig-gate0",
       "name": "Gate 0: Plan Approval",
@@ -101,7 +101,7 @@
       "position": [700, 900]
     },
     {
-      "parameters": { "command": "={{ 'cd /home/node/project && python -m pipeline.step1_scrape_news --source all --run-id ' + $json.run_id }}" },
+      "parameters": { "command": "={{ 'cd /home/node/instagram_stack && python -m pipeline.step1_scrape_news --source all --run-id ' + $json.run_id }}" },
       "id": "ig-step1", "name": "1. Scrape News", "type": "n8n-nodes-base.executeCommand", "typeVersion": 1, "position": [1000, 500]
     },
     {
@@ -111,11 +111,11 @@
       "id": "ig-parse1", "name": "Parse News", "type": "n8n-nodes-base.code", "typeVersion": 2, "position": [1250, 500]
     },
     {
-      "parameters": { "command": "={{ 'cd /home/node/project && python -c \"from services.mattermost_service import MattermostService; import os; mm = MattermostService(os.environ[\\\"MATTERMOST_URL\\\"], os.environ[\\\"MATTERMOST_BOT_TOKEN\\\"], os.environ[\\\"MATTERMOST_CHANNEL_ID\\\"]); mm.send_gate_approval(1, \\\"الأخبار جاهزة\\\", {\\\"المصادر\\\": \\\"RSS + Google\\\"}, \\\"' + $json.run_id + '\\\")\"' }}" },
+      "parameters": { "command": "={{ 'cd /home/node/instagram_stack && python -c \"from services.mattermost_service import MattermostService; import os; mm = MattermostService(os.environ[\\\"MATTERMOST_URL\\\"], os.environ[\\\"MATTERMOST_BOT_TOKEN\\\"], os.environ[\\\"MATTERMOST_CHANNEL_ID\\\"]); mm.send_gate_approval(1, \\\"الأخبار جاهزة\\\", {\\\"المصادر\\\": \\\"RSS + Google\\\"}, \\\"' + $json.run_id + '\\\")\"' }}" },
       "id": "ig-gate1", "name": "Gate 1: News Approval", "type": "n8n-nodes-base.executeCommand", "typeVersion": 1, "position": [1500, 500]
     },
     {
-      "parameters": { "command": "={{ 'cd /home/node/project && python -m pipeline.step2_generate_script --type game_highlights --duration 45 --run-id ' + $json.run_id }}" },
+      "parameters": { "command": "={{ 'cd /home/node/instagram_stack && python -m pipeline.step2_generate_script --type game_highlights --duration 45 --run-id ' + $json.run_id }}" },
       "id": "ig-step2", "name": "2. Generate Script", "type": "n8n-nodes-base.executeCommand", "typeVersion": 1, "position": [1000, 700]
     },
     {
@@ -123,7 +123,7 @@
       "id": "ig-parse2", "name": "Parse Script", "type": "n8n-nodes-base.code", "typeVersion": 2, "position": [1250, 700]
     },
     {
-      "parameters": { "command": "={{ 'cd /home/node/project && python -m pipeline.step3_validate_script --script-id ' + $json.script_id + ' --run-id ' + $json.run_id }}" },
+      "parameters": { "command": "={{ 'cd /home/node/instagram_stack && python -m pipeline.step3_validate_script --script-id ' + $json.script_id + ' --run-id ' + $json.run_id }}" },
       "id": "ig-step3", "name": "3. Validate Script", "type": "n8n-nodes-base.executeCommand", "typeVersion": 1, "position": [1500, 700]
     },
     {
@@ -131,11 +131,11 @@
       "id": "ig-parse3", "name": "Parse Validation", "type": "n8n-nodes-base.code", "typeVersion": 2, "position": [1750, 700]
     },
     {
-      "parameters": { "command": "={{ 'cd /home/node/project && python -c \"from services.mattermost_service import MattermostService; import os; mm = MattermostService(os.environ[\\\"MATTERMOST_URL\\\"], os.environ[\\\"MATTERMOST_BOT_TOKEN\\\"], os.environ[\\\"MATTERMOST_CHANNEL_ID\\\"]); mm.send_gate_approval(2, \\\"السكريبت جاهز\\\", {\\\"التقييم\\\": \\\"' + ($json.overall_score||0) + '/100\\\"}, \\\"' + $json.run_id + '\\\")\"' }}" },
+      "parameters": { "command": "={{ 'cd /home/node/instagram_stack && python -c \"from services.mattermost_service import MattermostService; import os; mm = MattermostService(os.environ[\\\"MATTERMOST_URL\\\"], os.environ[\\\"MATTERMOST_BOT_TOKEN\\\"], os.environ[\\\"MATTERMOST_CHANNEL_ID\\\"]); mm.send_gate_approval(2, \\\"السكريبت جاهز\\\", {\\\"التقييم\\\": \\\"' + ($json.overall_score||0) + '/100\\\"}, \\\"' + $json.run_id + '\\\")\"' }}" },
       "id": "ig-gate2", "name": "Gate 2: Script Approval", "type": "n8n-nodes-base.executeCommand", "typeVersion": 1, "position": [2000, 700]
     },
     {
-      "parameters": { "command": "={{ 'cd /home/node/project && python -m pipeline.step4_generate_voiceover --script-id ' + $json.script_id + ' --run-id ' + $json.run_id }}" },
+      "parameters": { "command": "={{ 'cd /home/node/instagram_stack && python -m pipeline.step4_generate_voiceover --script-id ' + $json.script_id + ' --run-id ' + $json.run_id }}" },
       "id": "ig-step4", "name": "4. Generate Voiceover", "type": "n8n-nodes-base.executeCommand", "typeVersion": 1, "position": [1000, 900]
     },
     {
@@ -143,11 +143,11 @@
       "id": "ig-parse4", "name": "Parse Voiceover", "type": "n8n-nodes-base.code", "typeVersion": 2, "position": [1250, 900]
     },
     {
-      "parameters": { "command": "={{ 'cd /home/node/project && python -c \"from services.mattermost_service import MattermostService; import os; mm = MattermostService(os.environ[\\\"MATTERMOST_URL\\\"], os.environ[\\\"MATTERMOST_BOT_TOKEN\\\"], os.environ[\\\"MATTERMOST_CHANNEL_ID\\\"]); mm.send_gate_approval(3, \\\"الصوت جاهز\\\", {\\\"المدة\\\": \\\"' + ($json.duration_seconds||0) + 's\\\"}, \\\"' + $json.run_id + '\\\")\"' }}" },
+      "parameters": { "command": "={{ 'cd /home/node/instagram_stack && python -c \"from services.mattermost_service import MattermostService; import os; mm = MattermostService(os.environ[\\\"MATTERMOST_URL\\\"], os.environ[\\\"MATTERMOST_BOT_TOKEN\\\"], os.environ[\\\"MATTERMOST_CHANNEL_ID\\\"]); mm.send_gate_approval(3, \\\"الصوت جاهز\\\", {\\\"المدة\\\": \\\"' + ($json.duration_seconds||0) + 's\\\"}, \\\"' + $json.run_id + '\\\")\"' }}" },
       "id": "ig-gate3", "name": "Gate 3: Voiceover Approval", "type": "n8n-nodes-base.executeCommand", "typeVersion": 1, "position": [1500, 900]
     },
     {
-      "parameters": { "command": "={{ 'cd /home/node/project && python -m pipeline.step5_download_footage --script-id ' + $json.script_id + ' --run-id ' + $json.run_id }}" },
+      "parameters": { "command": "={{ 'cd /home/node/instagram_stack && python -m pipeline.step5_download_footage --script-id ' + $json.script_id + ' --run-id ' + $json.run_id }}" },
       "id": "ig-step5", "name": "5. Download Footage", "type": "n8n-nodes-base.executeCommand", "typeVersion": 1, "position": [1000, 1100]
     },
     {
@@ -155,7 +155,7 @@
       "id": "ig-parse5", "name": "Parse Footage", "type": "n8n-nodes-base.code", "typeVersion": 2, "position": [1250, 1100]
     },
     {
-      "parameters": { "command": "={{ 'cd /home/node/project && python -m pipeline.step6_assemble_video --script-id ' + $json.script_id + ' --run-id ' + $json.run_id }}" },
+      "parameters": { "command": "={{ 'cd /home/node/instagram_stack && python -m pipeline.step6_assemble_video --script-id ' + $json.script_id + ' --run-id ' + $json.run_id }}" },
       "id": "ig-step6", "name": "6. Assemble Video", "type": "n8n-nodes-base.executeCommand", "typeVersion": 1, "position": [1500, 1100]
     },
     {
@@ -163,19 +163,19 @@
       "id": "ig-parse6", "name": "Parse Video", "type": "n8n-nodes-base.code", "typeVersion": 2, "position": [1750, 1100]
     },
     {
-      "parameters": { "command": "={{ 'cd /home/node/project && python -c \"from services.mattermost_service import MattermostService; import os; mm = MattermostService(os.environ[\\\"MATTERMOST_URL\\\"], os.environ[\\\"MATTERMOST_BOT_TOKEN\\\"], os.environ[\\\"MATTERMOST_CHANNEL_ID\\\"]); mm.send_gate_approval(4, \\\"الفيديو جاهز\\\", {\\\"الفيديو\\\": \\\"' + ($json.video_id||'') + '\\\"}, \\\"' + $json.run_id + '\\\")\"' }}" },
+      "parameters": { "command": "={{ 'cd /home/node/instagram_stack && python -c \"from services.mattermost_service import MattermostService; import os; mm = MattermostService(os.environ[\\\"MATTERMOST_URL\\\"], os.environ[\\\"MATTERMOST_BOT_TOKEN\\\"], os.environ[\\\"MATTERMOST_CHANNEL_ID\\\"]); mm.send_gate_approval(4, \\\"الفيديو جاهز\\\", {\\\"الفيديو\\\": \\\"' + ($json.video_id||'') + '\\\"}, \\\"' + $json.run_id + '\\\")\"' }}" },
       "id": "ig-gate4", "name": "Gate 4: Video Approval", "type": "n8n-nodes-base.executeCommand", "typeVersion": 1, "position": [2000, 1100]
     },
     {
-      "parameters": { "command": "={{ 'cd /home/node/project && python -c \"from services.mattermost_service import MattermostService; import os; mm = MattermostService(os.environ[\\\"MATTERMOST_URL\\\"], os.environ[\\\"MATTERMOST_BOT_TOKEN\\\"], os.environ[\\\"MATTERMOST_CHANNEL_ID\\\"]); mm.send_gate_approval(5, \\\"جاهز للنشر — أرفق الصورة المصغرة\\\", {\\\"المنصة\\\": \\\"Instagram\\\"}, \\\"' + $json.run_id + '\\\")\"' }}" },
+      "parameters": { "command": "={{ 'cd /home/node/instagram_stack && python -c \"from services.mattermost_service import MattermostService; import os; mm = MattermostService(os.environ[\\\"MATTERMOST_URL\\\"], os.environ[\\\"MATTERMOST_BOT_TOKEN\\\"], os.environ[\\\"MATTERMOST_CHANNEL_ID\\\"]); mm.send_gate_approval(5, \\\"جاهز للنشر — أرفق الصورة المصغرة\\\", {\\\"المنصة\\\": \\\"Instagram\\\"}, \\\"' + $json.run_id + '\\\")\"' }}" },
       "id": "ig-gate5", "name": "Gate 5: Publish + Thumbnail", "type": "n8n-nodes-base.executeCommand", "typeVersion": 1, "position": [1000, 1350]
     },
     {
-      "parameters": { "command": "={{ 'cd /home/node/project && python -m pipeline.step7_publish --mode publish --run-id ' + $json.run_id }}" },
+      "parameters": { "command": "={{ 'cd /home/node/instagram_stack && python -m pipeline.step7_publish --mode publish --run-id ' + $json.run_id }}" },
       "id": "ig-step7", "name": "7. Publish", "type": "n8n-nodes-base.executeCommand", "typeVersion": 1, "position": [1000, 1550]
     },
     {
-      "parameters": { "command": "={{ 'cd /home/node/project && python -m pipeline.step8_update_rag --run-id ' + $json.run_id }}" },
+      "parameters": { "command": "={{ 'cd /home/node/instagram_stack && python -m pipeline.step8_update_rag --run-id ' + $json.run_id }}" },
       "id": "ig-step8", "name": "8. Update RAG", "type": "n8n-nodes-base.executeCommand", "typeVersion": 1, "position": [1250, 1550]
     },
     {

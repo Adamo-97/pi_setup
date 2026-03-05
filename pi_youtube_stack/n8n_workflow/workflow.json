@@ -39,7 +39,7 @@
     },
     {
       "parameters": {
-        "command": "={{ 'cd /home/node/project && .venv/bin/python3 -c \"from agents.planner_agent import PlannerAgent; import json; p = PlannerAgent(); r = p.execute(); print(json.dumps(r))\"' }}"
+        "command": "={{ 'cd /home/node/youtube_stack && .venv/bin/python3 -c \"from agents.planner_agent import PlannerAgent; import json; p = PlannerAgent(); r = p.execute(); print(json.dumps(r))\"' }}"
       },
       "id": "step0-plan",
       "name": "0. Generate Plan",
@@ -60,7 +60,7 @@
     },
     {
       "parameters": {
-        "command": "={{ 'cd /home/node/project && .venv/bin/python3 -c \"from services.mattermost_service import MattermostService; mm = MattermostService(); mm.send_gate_approval(0, \\\"خطة محتوى جديدة للمراجعة\\\", {\\\"الموضوع\\\": \\\"' + ($json.proposed_topic || '').replace(/\"/g, '') + '\\\", \\\"النوع\\\": \\\"' + ($json.proposed_content_type || '') + '\\\", \\\"التكلفة\\\": \\\"' + ($json.estimated_cost_units || 0) + ' وحدة\\\"}, \\\"' + $json.run_id + '\\\", budget_status=\\\"' + ($json.budget_status || '') + '\\\")\"' }}"
+        "command": "={{ 'cd /home/node/youtube_stack && .venv/bin/python3 -c \"from services.mattermost_service import MattermostService; mm = MattermostService(); mm.send_gate_approval(0, \\\"خطة محتوى جديدة للمراجعة\\\", {\\\"الموضوع\\\": \\\"' + ($json.proposed_topic || '').replace(/\"/g, '') + '\\\", \\\"النوع\\\": \\\"' + ($json.proposed_content_type || '') + '\\\", \\\"التكلفة\\\": \\\"' + ($json.estimated_cost_units || 0) + ' وحدة\\\"}, \\\"' + $json.run_id + '\\\", budget_status=\\\"' + ($json.budget_status || '') + '\\\")\"' }}"
       },
       "id": "gate0-notify",
       "name": "Gate 0: Plan Approval",
@@ -132,7 +132,7 @@
     },
     {
       "parameters": {
-        "command": "={{ 'cd /home/node/project && .venv/bin/python3 scripts/fetch_game_data.py --type monthly_releases --run-id ' + $json.run_id }}"
+        "command": "={{ 'cd /home/node/youtube_stack && .venv/bin/python3 scripts/fetch_game_data.py --type monthly_releases --run-id ' + $json.run_id }}"
       },
       "id": "step1-fetch",
       "name": "1. Fetch Game Data",
@@ -152,7 +152,7 @@
     },
     {
       "parameters": {
-        "command": "={{ 'cd /home/node/project && .venv/bin/python3 -c \"from services.mattermost_service import MattermostService; mm = MattermostService(); mm.send_gate_approval(1, \\\"بيانات الألعاب جاهزة\\\", {\\\"الألعاب\\\": \\\"' + ($json.games_found || 0) + '\\\", \\\"المصدر\\\": \\\"RAWG API\\\"}, \\\"' + $json.run_id + '\\\")\"' }}"
+        "command": "={{ 'cd /home/node/youtube_stack && .venv/bin/python3 -c \"from services.mattermost_service import MattermostService; mm = MattermostService(); mm.send_gate_approval(1, \\\"بيانات الألعاب جاهزة\\\", {\\\"الألعاب\\\": \\\"' + ($json.games_found || 0) + '\\\", \\\"المصدر\\\": \\\"RAWG API\\\"}, \\\"' + $json.run_id + '\\\")\"' }}"
       },
       "id": "gate1-notify",
       "name": "Gate 1: Data Approval",
@@ -163,7 +163,7 @@
     },
     {
       "parameters": {
-        "command": "={{ 'cd /home/node/project && .venv/bin/python3 scripts/generate_script.py --type monthly_releases --run-id ' + $json.run_id }}"
+        "command": "={{ 'cd /home/node/youtube_stack && .venv/bin/python3 scripts/generate_script.py --type monthly_releases --run-id ' + $json.run_id }}"
       },
       "id": "step2-script",
       "name": "2. Generate Script",
@@ -183,7 +183,7 @@
     },
     {
       "parameters": {
-        "command": "={{ 'cd /home/node/project && .venv/bin/python3 scripts/validate_script.py --script-id ' + $json.script_id + ' --run-id ' + $json.run_id }}"
+        "command": "={{ 'cd /home/node/youtube_stack && .venv/bin/python3 scripts/validate_script.py --script-id ' + $json.script_id + ' --run-id ' + $json.run_id }}"
       },
       "id": "step2b-validate",
       "name": "2b. Validate Script",
@@ -203,7 +203,7 @@
     },
     {
       "parameters": {
-        "command": "={{ 'cd /home/node/project && .venv/bin/python3 -c \"from services.mattermost_service import MattermostService; mm = MattermostService(); mm.send_gate_approval(2, \\\"السكريبت جاهز — تقييم: ' + ($json.overall_score || 0) + '/100\\\", {\\\"العنوان\\\": \\\"' + ($json.title || '').replace(/\"/g, '') + '\\\", \\\"التقييم\\\": \\\"' + ($json.overall_score || 0) + '/100\\\", \\\"ID\\\": \\\"' + ($json.script_id || '') + '\\\"}, \\\"' + $json.run_id + '\\\")\"' }}"
+        "command": "={{ 'cd /home/node/youtube_stack && .venv/bin/python3 -c \"from services.mattermost_service import MattermostService; mm = MattermostService(); mm.send_gate_approval(2, \\\"السكريبت جاهز — تقييم: ' + ($json.overall_score || 0) + '/100\\\", {\\\"العنوان\\\": \\\"' + ($json.title || '').replace(/\"/g, '') + '\\\", \\\"التقييم\\\": \\\"' + ($json.overall_score || 0) + '/100\\\", \\\"ID\\\": \\\"' + ($json.script_id || '') + '\\\"}, \\\"' + $json.run_id + '\\\")\"' }}"
       },
       "id": "gate2-notify",
       "name": "Gate 2: Script Approval",
@@ -214,7 +214,7 @@
     },
     {
       "parameters": {
-        "command": "={{ 'cd /home/node/project && .venv/bin/python3 scripts/generate_metadata.py --script-id ' + $('Parse Validation').first().json.script_id + ' --run-id ' + $json.run_id }}"
+        "command": "={{ 'cd /home/node/youtube_stack && .venv/bin/python3 scripts/generate_metadata.py --script-id ' + $('Parse Validation').first().json.script_id + ' --run-id ' + $json.run_id }}"
       },
       "id": "step3-metadata",
       "name": "3. Generate Metadata",
@@ -234,7 +234,7 @@
     },
     {
       "parameters": {
-        "command": "={{ 'cd /home/node/project && .venv/bin/python3 -c \"from services.mattermost_service import MattermostService; mm = MattermostService(); mm.send_gate_approval(3, \\\"البيانات الوصفية جاهزة\\\", {\\\"العنوان\\\": \\\"' + ($json.title || '').replace(/\"/g, '') + '\\\"}, \\\"' + $json.run_id + '\\\")\"' }}"
+        "command": "={{ 'cd /home/node/youtube_stack && .venv/bin/python3 -c \"from services.mattermost_service import MattermostService; mm = MattermostService(); mm.send_gate_approval(3, \\\"البيانات الوصفية جاهزة\\\", {\\\"العنوان\\\": \\\"' + ($json.title || '').replace(/\"/g, '') + '\\\"}, \\\"' + $json.run_id + '\\\")\"' }}"
       },
       "id": "gate3-notify",
       "name": "Gate 3: Metadata Approval",
@@ -245,7 +245,7 @@
     },
     {
       "parameters": {
-        "command": "={{ 'cd /home/node/project && .venv/bin/python3 scripts/generate_voiceover.py --script-id ' + $('Parse Validation').first().json.script_id + ' --run-id ' + $json.run_id }}"
+        "command": "={{ 'cd /home/node/youtube_stack && .venv/bin/python3 scripts/generate_voiceover.py --script-id ' + $('Parse Validation').first().json.script_id + ' --run-id ' + $json.run_id }}"
       },
       "id": "step4-voiceover",
       "name": "4. Generate Voiceover",
@@ -265,7 +265,7 @@
     },
     {
       "parameters": {
-        "command": "={{ 'cd /home/node/project && .venv/bin/python3 -c \"from services.mattermost_service import MattermostService; mm = MattermostService(); mm.send_gate_approval(4, \\\"التعليق الصوتي جاهز — المدة: ' + ($json.duration_seconds || 0) + ' ثانية\\\", {\\\"المدة\\\": \\\"' + ($json.duration_seconds || 0) + 's\\\", \\\"الملف\\\": \\\"' + ($json.audio_file || '') + '\\\"}, \\\"' + $json.run_id + '\\\")\"' }}"
+        "command": "={{ 'cd /home/node/youtube_stack && .venv/bin/python3 -c \"from services.mattermost_service import MattermostService; mm = MattermostService(); mm.send_gate_approval(4, \\\"التعليق الصوتي جاهز — المدة: ' + ($json.duration_seconds || 0) + ' ثانية\\\", {\\\"المدة\\\": \\\"' + ($json.duration_seconds || 0) + 's\\\", \\\"الملف\\\": \\\"' + ($json.audio_file || '') + '\\\"}, \\\"' + $json.run_id + '\\\")\"' }}"
       },
       "id": "gate4-notify",
       "name": "Gate 4: Audio Approval",
@@ -276,7 +276,7 @@
     },
     {
       "parameters": {
-        "command": "={{ 'cd /home/node/project && .venv/bin/python3 -c \"from services.mattermost_service import MattermostService; mm = MattermostService(); mm.send_gate_approval(5, \\\"جاهز للنشر — يرجى إرفاق الصورة المصغرة كرد ثم الموافقة\\\", {\\\"المنصة\\\": \\\"YouTube\\\", \\\"الحالة\\\": \\\"جاهز\\\"}, \\\"' + $json.run_id + '\\\")\"' }}"
+        "command": "={{ 'cd /home/node/youtube_stack && .venv/bin/python3 -c \"from services.mattermost_service import MattermostService; mm = MattermostService(); mm.send_gate_approval(5, \\\"جاهز للنشر — يرجى إرفاق الصورة المصغرة كرد ثم الموافقة\\\", {\\\"المنصة\\\": \\\"YouTube\\\", \\\"الحالة\\\": \\\"جاهز\\\"}, \\\"' + $json.run_id + '\\\")\"' }}"
       },
       "id": "gate5-notify",
       "name": "Gate 5: Publish + Thumbnail",
@@ -297,7 +297,7 @@
     },
     {
       "parameters": {
-        "command": "={{ 'cd /home/node/project && .venv/bin/python3 scripts/update_rag.py --run-id ' + $json.run_id }}"
+        "command": "={{ 'cd /home/node/youtube_stack && .venv/bin/python3 scripts/update_rag.py --run-id ' + $json.run_id }}"
       },
       "id": "update-rag",
       "name": "6. Update RAG",
@@ -327,7 +327,7 @@
     },
     {
       "parameters": {
-        "command": "={{ 'cd /home/node/project && .venv/bin/python3 scripts/update_rag.py --type rejection --gate ' + $json.gate + ' --run-id ' + $json.run_id }}"
+        "command": "={{ 'cd /home/node/youtube_stack && .venv/bin/python3 scripts/update_rag.py --type rejection --gate ' + $json.gate + ' --run-id ' + $json.run_id }}"
       },
       "id": "store-rejection",
       "name": "Store Rejection in RAG",

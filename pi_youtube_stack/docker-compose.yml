@@ -148,5 +148,6 @@ volumes:
 # ----------------------------------------------------------------------------
 networks:
   youtube_stack_net:
+    name: youtube_stack_net
     driver: bridge
     name: youtube_stack_net
