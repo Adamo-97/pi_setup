@@ -24,7 +24,8 @@
       "parameters": {
         "httpMethod": "POST",
         "path": "instagram-manual",
-        "responseMode": "responseNode"
+        "responseMode": "onReceived",
+        "responseData": "firstEntryJson"
       },
       "id": "ig-webhook-manual",
       "name": "Manual Trigger",
