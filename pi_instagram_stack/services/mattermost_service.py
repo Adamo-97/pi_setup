@@ -29,7 +29,7 @@ class MattermostService:
         url: str,
         bot_token: str,
         channel_id: str,
-        n8n_base_url: str = "http://localhost:5680",
+        n8n_base_url: str = "http://192.168.0.11:5678",
     ):
         self.base_url = url.rstrip("/")
         self.bot_token = bot_token

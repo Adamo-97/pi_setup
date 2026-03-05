@@ -43,6 +43,16 @@ services:
       EXECUTIONS_DATA_SAVE_MANUAL_EXECUTIONS: "true"
     ports:
       - "5678:5678"
+    env_file:
+      # Each pipeline's .env is loaded so inline gate commands
+      # (python -c "... os.environ['MATTERMOST_URL'] ...") work.
+      # Last file wins for duplicate keys — fine since each pipeline's
+      # gate commands only run in the context of that pipeline's workflow.
+      - ../pi_instagram_stack/.env
+      # Uncomment as you deploy each stack:
+      # - ../pi_tiktok_stack/.env
+      # - ../pi_x_stack/.env
+      # - ../pi_youtube_stack/.env
     volumes:
       # Persistent n8n data (workflows, credentials, sqlite db)
       - n8n_data:/home/node/.n8n
