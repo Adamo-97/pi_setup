@@ -30,8 +30,7 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:-mm_user}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
       TZ: ${TZ:-Europe/Stockholm}
-    ports:
-      - "${POSTGRES_PORT:-5438}:5432"
+    # No host port — only Mattermost container needs DB access via internal Docker network
     volumes:
       # Database on NVMe for fast I/O
       - ${NVME_MOUNT:-/opt}/mattermost/db:/var/lib/postgresql/data
@@ -77,9 +76,11 @@ services:
       MM_SERVICESETTINGS_SITEURL: ${MM_SITEURL:-http://192.168.1.100:8065}
       MM_SERVICESETTINGS_LISTENADDRESS: ":8065"
 
-      # ── Mobile Push Notifications (Self-Hosted Proxy) ──
+      # ── Mobile Push Notifications (Mattermost TPNS — free test server) ──
+      # Works with the standard Play Store / App Store Mattermost app.
+      # Limit: 100 notifications/day (plenty for personal use).
       MM_EMAILSETTINGS_SENDPUSHNOTIFICATIONS: "true"
-      MM_EMAILSETTINGS_PUSHNOTIFICATIONSERVER: "http://push-proxy:8066"
+      MM_EMAILSETTINGS_PUSHNOTIFICATIONSERVER: "https://push-test.mattermost.com"
       MM_EMAILSETTINGS_PUSHNOTIFICATIONCONTENTS: "id_loaded"
 
       # ── Bot & Integration Settings ──
@@ -119,8 +120,6 @@ services:
     depends_on:
       postgres_mattermost:
         condition: service_healthy
-      push-proxy:
-        condition: service_started
     healthcheck:
       # Distroless AMD64 image under QEMU: only the mattermost binary is available.
       # 'db migrate' exits 0 when DB is up-to-date (no migrations needed).
@@ -135,33 +134,6 @@ services:
       resources:
         limits:
           memory: 1024M
-
-  # --------------------------------------------------------------------------
-  # Mattermost Self-Hosted Push Proxy
-  # --------------------------------------------------------------------------
-  # Relays push notifications from Mattermost → Apple APNs & Google FCM.
-  # Requires:
-  #   • /opt/mattermost/push-proxy/config/push-proxy.json  (edit credentials)
-  #   • /opt/mattermost/push-proxy/certs/apple.pem         (Apple Developer cert)
-  # See config/push-proxy.json.example and README.md → PUSH PROXY SETUP.
-  # --------------------------------------------------------------------------
-  push-proxy:
-    image: mattermost/mattermost-push-proxy:latest
-    container_name: mattermost-push-proxy
-    restart: unless-stopped
-    environment:
-      TZ: ${TZ:-Europe/Stockholm}
-    ports:
-      - "${PUSH_PROXY_PORT:-8066}:8066"
-    volumes:
-      - ${NVME_MOUNT:-/opt}/mattermost/push-proxy/config/mattermost-push-proxy.json:/mattermost-push-proxy/mattermost-push-proxy.json:ro
-      - ${NVME_MOUNT:-/opt}/mattermost/push-proxy/certs:/certs:ro
-    networks:
-      - mattermost_net
-    deploy:
-      resources:
-        limits:
-          memory: 128M
 
 # ----------------------------------------------------------------------------
 # Network — isolated bridge for the Mattermost stack
