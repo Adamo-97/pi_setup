@@ -3,7 +3,7 @@
 """
 Step 5: Download Footage
 ========================
-Uses ClipAgent to plan footage selection, then VideoDownloader
+Uses ClipSelector to plan footage selection, then VideoDownloader
 to download gameplay/trailer clips from YouTube or local library.
 
 Usage:
@@ -18,7 +18,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from agents.clip_agent import ClipAgent
+from processors.clip import ClipSelector
 from database.connection import execute_query
 from services.video_downloader import VideoDownloader
 
@@ -61,8 +61,8 @@ def main(script_id: str) -> dict:
     )
     target_duration = vo_rows[0][0] if vo_rows else 45.0
 
-    # Use ClipAgent to plan footage
-    clip_agent = ClipAgent()
+    # Use ClipSelector to plan footage
+    clip_agent = ClipSelector()
     game_titles = clip_agent.extract_game_titles(script_text)
     clip_plan = clip_agent.run(
         script_text=script_text,

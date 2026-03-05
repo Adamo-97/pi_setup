@@ -23,6 +23,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from config.settings import get_settings
 from database.connection import execute_query
 from services.buffer_service import BufferService
+from processors.seo import SEO
 
 logging.basicConfig(
     level=logging.INFO,
@@ -90,7 +91,9 @@ def main(video_id: str, mode: str = "notify") -> dict:
             video_id=video_id,
             video_path=video_path,
             script_text=script_text,
+            script_id=script_id,
             content_type=content_type,
+            duration=duration,
             settings=settings,
         )
     else:
@@ -101,24 +104,37 @@ def _publish_to_buffer(
     video_id: str,
     video_path: str,
     script_text: str,
+    script_id: str,
     content_type: str,
+    duration: float,
     settings,
 ) -> dict:
-    """Publish video to Instagram via Buffer."""
+    """Publish video to Instagram via Buffer, with AI-generated SEO caption."""
     buffer = BufferService(
         access_token=settings.buffer.access_token,
         profile_id=settings.buffer.profile_id,
     )
 
-    # Build caption (first 150 chars of script + hashtags)
-    import re
-
-    clean_text = re.sub(r"\[.*?\]", "", script_text)
-    caption = clean_text[:150].strip()
-    if len(clean_text) > 150:
-        caption += "..."
-
-    hashtags = BufferService.get_default_hashtags(content_type)
+    # Generate SEO-optimised caption and hashtags via Gemini
+    try:
+        seo = SEO()
+        seo_result = seo.run(
+            script_text=script_text,
+            content_type=content_type,
+            topics=content_type.replace("_", " "),  # fallback; ideally from plan
+            duration_seconds=int(duration or 45),
+            script_id=script_id,
+        )
+        caption = seo_result["full_caption"]
+        hashtags = seo_result["hashtags_first_comment"]  # posted separately below
+        logger.info("SEO agent produced caption (%d chars)", len(caption))
+    except Exception as exc:
+        logger.warning("SEO agent failed (%s) — falling back to truncated caption", exc)
+        import re
+        clean_text = re.sub(r"\[.*?\]", "", script_text)
+        caption = clean_text[:150].strip() + ("..." if len(clean_text) > 150 else "")
+        hashtags = BufferService.get_default_hashtags(content_type)
+        seo_result = {}
 
     pub_result = buffer.publish_video(
         video_path=video_path,
@@ -151,6 +167,8 @@ def _publish_to_buffer(
         "success": pub_result["success"],
         "buffer_update_id": pub_result.get("update_id"),
         "message": pub_result.get("message", ""),
+        "seo_id": seo_result.get("seo_id"),
+        "caption_used": caption,
     }
 
     logger.info("Buffer publish: %s", "✅" if pub_result["success"] else "❌")

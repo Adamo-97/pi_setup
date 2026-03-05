@@ -29,7 +29,7 @@
       "position": [450, 400]
     },
     {
-      "parameters": { "command": "cd /home/node/instagram_stack && python -c \"from agents.planner_agent import PlannerAgent; import json; p = PlannerAgent(); print(json.dumps(p.run()))\"" },
+      "parameters": { "command": "cd /home/node/instagram_stack && python -c \"from processors.planner import Planner; import json; p = Planner(); print(json.dumps(p.run()))\"" },
       "id": "ig-step0",
       "name": "0. Generate Plan",
       "type": "n8n-nodes-base.executeCommand",
