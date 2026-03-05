@@ -32,7 +32,7 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
-from agents.metadata_agent import MetadataAgent
+from processors.metadata import Metadata
 from database.connection import execute_query
 from config.settings import settings
 
@@ -121,7 +121,7 @@ def main():
         # ------------------------------------------------------------------
         # Run Metadata Agent
         # ------------------------------------------------------------------
-        agent = MetadataAgent()
+        agent = Metadata()
         result = agent.execute(
             script_id=script_id,
             script_text=script_text,

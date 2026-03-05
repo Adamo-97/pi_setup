@@ -3,7 +3,7 @@
 """
 Step 2: Generate Script
 =======================
-Uses the WriterAgent to generate an X/Twitter video script from scraped news.
+Uses the Writer to generate an X/Twitter video script from scraped news.
 Picks top unused articles and generates an Arabic gaming script with tweet caption.
 
 Usage:
@@ -19,7 +19,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from agents.writer_agent import WriterAgent
+from processors.writer import Writer
 from database.connection import execute_query
 from services.news_scraper import NewsScraper
 
@@ -65,7 +65,7 @@ def main(content_type: str = "trending_news", duration: float = 45.0) -> dict:
     ]
 
     # Generate script
-    writer = WriterAgent()
+    writer = Writer()
     result = writer.run(
         content_type=content_type,
         news_articles=article_dicts,

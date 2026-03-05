@@ -3,7 +3,7 @@
 """
 Step 3: Validate Script
 =======================
-Runs the ValidatorAgent to score and approve/reject the generated script.
+Runs the Validator to score and approve/reject the generated script.
 Auto-revises up to 2 times if the script fails quality checks.
 
 Usage:
@@ -18,8 +18,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from agents.validator_agent import ValidatorAgent
-from agents.writer_agent import WriterAgent
+from processors.validator import Validator
+from processors.writer import Writer
 from database.connection import execute_query
 
 logging.basicConfig(
@@ -71,10 +71,10 @@ def main(script_id: str, auto_revise: bool = True) -> dict:
             pass
 
     # Run validation
-    validator = ValidatorAgent()
+    validator = Validator()
 
     if auto_revise:
-        writer = WriterAgent()
+        writer = Writer()
         result = validator.validate_with_revision(
             script_id=script_id,
             script_text=script_text,

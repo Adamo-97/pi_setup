@@ -43,7 +43,7 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
-from agents.writer_agent import WriterAgent
+from processors.writer import Writer
 from database.connection import execute_query
 
 # ---------------------------------------------------------------------------
@@ -188,7 +188,7 @@ def main():
         # ------------------------------------------------------------------
         # Run Writer Agent
         # ------------------------------------------------------------------
-        writer = WriterAgent()
+        writer = Writer()
         result = writer.execute(
             content_type=content_type,
             games_data=games_data,

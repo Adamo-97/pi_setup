@@ -53,7 +53,7 @@
     },
     {
       "parameters": {
-        "command": "={{ 'cd /home/node/youtube_stack && .venv/bin/python3 -c \"from agents.planner_agent import PlannerAgent; import json; p = PlannerAgent(); r = p.execute(); print(json.dumps(r))\"' }}"
+        "command": "={{ 'cd /home/node/youtube_stack && .venv/bin/python3 -c \"from processors.planner import Planner; import json; p = Planner(); r = p.execute(); print(json.dumps(r))\"' }}"
       },
       "id": "step0-plan",
       "name": "0. Generate Plan",
