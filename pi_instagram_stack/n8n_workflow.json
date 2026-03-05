@@ -39,7 +39,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const runId = require('crypto').randomUUID();\nreturn [{ json: { content_type: 'game_highlights', duration: 45, run_id: runId } }];"
+        "jsCode": "function uuidv4() {\n  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {\n    const r = Math.random() * 16 | 0;\n    return (c === 'x' ? r : (r & 0x3 | 0x8)).toString(16);\n  });\n}\nconst runId = uuidv4();\nreturn [{ json: { content_type: 'game_highlights', duration: 45, run_id: runId } }];"
       },
       "id": "ig-set-defaults",
       "name": "Set Defaults",
