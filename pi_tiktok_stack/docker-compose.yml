@@ -1,5 +1,12 @@
 version: "3.8"
 
+# =============================================================
+# pi_tiktok_stack — Docker Compose
+# =============================================================
+# PostgreSQL (pgvector) + Redis for the TikTok pipeline.
+# n8n is provided by the shared pi_n8n_stack (see ../pi_n8n_stack).
+# =============================================================
+
 services:
   postgres_tiktok:
     image: pgvector/pgvector:pg16
@@ -19,31 +26,6 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
-    deploy:
-      resources:
-        limits:
-          memory: 512M
-    networks:
-      - tiktok_stack_net
-
-  n8n_tiktok:
-    image: n8nio/n8n:latest
-    container_name: n8n_tiktok
-    restart: unless-stopped
-    environment:
-      - N8N_PORT=5679
-      - WEBHOOK_URL=http://localhost:5679/
-      - GENERIC_TIMEZONE=Europe/Stockholm
-      - TZ=Europe/Stockholm
-    ports:
-      - "5679:5679"
-    volumes:
-      - n8n_tiktok_data:/home/node/.n8n
-      - .:/home/node/project:ro
-      - ./output:/home/node/project/output:rw
-    depends_on:
-      postgres_tiktok:
-        condition: service_healthy
     deploy:
       resources:
         limits:
@@ -79,7 +61,6 @@ services:
 
 volumes:
   pgdata_tiktok:
-  n8n_tiktok_data:
   redis_tiktok_data:
 
 networks:

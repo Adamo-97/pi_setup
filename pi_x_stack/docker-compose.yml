@@ -3,8 +3,8 @@ version: "3.8"
 # =============================================================
 # pi_x_stack — Docker Compose
 # =============================================================
-# PostgreSQL (pgvector) + n8n for X/Twitter pipeline.
-# Isolated network — runs alongside YouTube/TikTok/Instagram stacks.
+# PostgreSQL (pgvector) + Redis for X/Twitter pipeline.
+# n8n is provided by the shared pi_n8n_stack (see ../pi_n8n_stack).
 # =============================================================
 
 services:
@@ -26,32 +26,6 @@ services:
       - ./database/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
     networks:
       - x_stack_net
-    deploy:
-      resources:
-        limits:
-          memory: 512M
-
-  # ---------------------------------------------------------
-  # n8n — Workflow orchestrator
-  # ---------------------------------------------------------
-  n8n_x:
-    image: n8nio/n8n:latest
-    container_name: n8n_x
-    restart: unless-stopped
-    ports:
-      - "5681:5678"
-    environment:
-      - N8N_PORT=5678
-      - GENERIC_TIMEZONE=Europe/Stockholm
-      - N8N_SECURE_COOKIE=false
-      - NODE_FUNCTION_ALLOW_EXTERNAL=*
-    volumes:
-      - n8n_x_data:/home/node/.n8n
-      - .:/home/node/project:ro
-    networks:
-      - x_stack_net
-    depends_on:
-      - postgres_x
     deploy:
       resources:
         limits:
@@ -85,7 +59,6 @@ services:
 
 volumes:
   pgdata_x:
-  n8n_x_data:
   redis_x_data:
 
 networks:
