@@ -94,9 +94,9 @@ class Planner(BaseProcessor):
             current_date=date.today().isoformat(),
         )
 
-        response = self.gemini.generate(
+        response = self.gemini.generate_text(
+            prompt=prompt,
             system_prompt=PLANNER_SYSTEM_PROMPT,
-            user_prompt=prompt,
         )
 
         # 6. Parse response
@@ -147,7 +147,7 @@ class Planner(BaseProcessor):
     def _get_trending_games(self) -> str:
         """Query shared RAWG cache for visually impressive games."""
         try:
-            conn = psycopg2.connect(**self._shared_rawg_config)
+            conn = psycopg2.connect(**self._shared_rawg_config, connect_timeout=5)
             conn.set_client_encoding("UTF8")
             cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
             cur.execute(
@@ -194,7 +194,7 @@ class Planner(BaseProcessor):
             )
             if not recent:
                 return "لا توجد مواضيع مغطاة."
-            return "\n".join(f"- [{r[0]}] ({r[1]})" for r in recent)
+            return "\n".join(f"- [{r['content_type']}] ({r['created_at']})" for r in recent)
         except Exception as exc:
             logger.warning("Covered topics query failed: %s", exc)
             return "خطأ في استرجاع المواضيع."

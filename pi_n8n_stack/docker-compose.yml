@@ -23,6 +23,18 @@ services:
     image: n8n-python:local
     container_name: n8n
     restart: unless-stopped
+    ports:
+      - "5678:5678"
+    env_file:
+      # Each pipeline's .env is loaded so inline gate commands
+      # (python -c "... os.environ['MATTERMOST_URL'] ...") work.
+      # Last file wins for duplicate keys — fine since each pipeline's
+      # gate commands only run in the context of that pipeline's workflow.
+      - ../pi_instagram_stack/.env
+      # Uncomment as you deploy each stack:
+      # - ../pi_tiktok_stack/.env
+      # - ../pi_x_stack/.env
+      # - ../pi_youtube_stack/.env
     environment:
       # --- Auth ---------------------------------------------------------------
       N8N_BASIC_AUTH_ACTIVE: "true"
@@ -45,18 +57,11 @@ services:
       EXECUTIONS_DATA_SAVE_ON_ERROR: all
       EXECUTIONS_DATA_SAVE_ON_SUCCESS: all
       EXECUTIONS_DATA_SAVE_MANUAL_EXECUTIONS: "true"
-    ports:
-      - "5678:5678"
-    env_file:
-      # Each pipeline's .env is loaded so inline gate commands
-      # (python -c "... os.environ['MATTERMOST_URL'] ...") work.
-      # Last file wins for duplicate keys — fine since each pipeline's
-      # gate commands only run in the context of that pipeline's workflow.
-      - ../pi_instagram_stack/.env
-      # Uncomment as you deploy each stack:
-      # - ../pi_tiktok_stack/.env
-      # - ../pi_x_stack/.env
-      # - ../pi_youtube_stack/.env
+      # --- Docker host overrides (override .env values that use localhost) ----
+      # Inside the n8n container, services are reachable by Docker hostname.
+      DB_HOST: postgres_instagram
+      DB_PORT: "5432"
+      REDIS_URL: redis://redis_instagram:6379
     volumes:
       # Persistent n8n data (workflows, credentials, sqlite db)
       - n8n_data:/home/node/.n8n
