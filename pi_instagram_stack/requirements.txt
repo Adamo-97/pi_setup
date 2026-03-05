@@ -15,6 +15,9 @@ pydantic>=2.5.0
 # --- Environment ---
 python-dotenv>=1.0.0
 
+# --- Redis (rate-limiter / budget tracking) ---
+redis>=5.0.0
+
 # --- HTTP ---
 requests>=2.31.0
 

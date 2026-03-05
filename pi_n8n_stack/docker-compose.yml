@@ -16,7 +16,10 @@
 
 services:
   n8n:
-    image: n8nio/n8n:latest
+    build:
+      context: ..
+      dockerfile: pi_n8n_stack/Dockerfile
+    image: n8n-python:local
     container_name: n8n
     restart: unless-stopped
     environment:

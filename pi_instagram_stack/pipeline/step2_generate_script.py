@@ -104,5 +104,6 @@ if __name__ == "__main__":
     parser.add_argument(
         "--duration", type=float, default=45.0, help="Target duration (s)"
     )
+    parser.add_argument("--run-id", default=None, help="n8n run ID (ignored, for tracking)")
     args = parser.parse_args()
     main(content_type=args.type, duration=args.duration)

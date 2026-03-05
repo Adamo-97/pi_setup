@@ -1,0 +1,32 @@
+# =============================================
+# pi_n8n_stack — Python dependencies
+# Installed inside the custom n8n container.
+# Covers all 4 pipeline stacks (Instagram, TikTok, X, YouTube).
+# Heavy video-assembly deps (moviepy, Pillow) excluded —
+# add them once step 6 is tested.
+# =============================================
+
+# --- Google Gemini AI ---
+google-generativeai>=0.8.0
+
+# --- Database ---
+psycopg2-binary>=2.9.9
+
+# --- Redis (rate-limiter / budget tracking) ---
+redis>=5.0.0
+
+# --- Data Models ---
+pydantic>=2.5.0
+
+# --- Environment ---
+python-dotenv>=1.0.0
+
+# --- HTTP / News Scraping ---
+requests>=2.31.0
+feedparser>=6.0.0
+
+# --- Video Download (step 5) ---
+yt-dlp>=2024.1.0
+
+# --- Logging ---
+colorlog>=6.7.0

@@ -124,5 +124,6 @@ if __name__ == "__main__":
         default="all",
         help="News source to scrape",
     )
+    parser.add_argument("--run-id", default=None, help="n8n run ID (ignored, for tracking)")
     args = parser.parse_args()
     main(source=args.source)

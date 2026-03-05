@@ -115,5 +115,6 @@ if __name__ == "__main__":
         action="store_true",
         help="Disable auto-revision",
     )
+    parser.add_argument("--run-id", default=None, help="n8n run ID (ignored, for tracking)")
     args = parser.parse_args()
     main(script_id=args.script_id, auto_revise=not args.no_revise)
