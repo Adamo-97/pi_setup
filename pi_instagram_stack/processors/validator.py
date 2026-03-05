@@ -64,15 +64,16 @@ class Validator(BaseProcessor):
             content_type=content_type,
             word_count=word_count,
             estimated_duration=f"{est_duration:.1f}",
+            target_duration=int(kwargs.get("target_duration", 45)),
             news_summaries=news_summaries or "Not provided",
         )
 
         try:
             raw = self.gemini.generate_json(
                 prompt=prompt,
-                system_instruction=VALIDATOR_SYSTEM_PROMPT,
+                system_prompt=VALIDATOR_SYSTEM_PROMPT,
             )
-            validation = json.loads(raw)
+            validation = raw if isinstance(raw, dict) else json.loads(raw)
         except (json.JSONDecodeError, Exception) as e:
             logger.error("Validation JSON parse failed: %s", e)
             # Fallback: generate text and try to extract

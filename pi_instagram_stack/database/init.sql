@@ -129,15 +129,12 @@ CREATE TABLE IF NOT EXISTS rag_embeddings (
     source_id       UUID,
     content_text    TEXT         NOT NULL,
     content_summary VARCHAR(500),
-    embedding       vector(768)  NOT NULL,
+    embedding       vector(3072) NOT NULL,
     metadata        JSONB        DEFAULT '{}',
     created_at      TIMESTAMPTZ  DEFAULT NOW()
 );
 
 CREATE INDEX IF NOT EXISTS idx_rag_source ON rag_embeddings(source_type);
-CREATE INDEX IF NOT EXISTS idx_rag_embedding ON rag_embeddings
-    USING hnsw (embedding vector_cosine_ops)
-    WITH (m = 16, ef_construction = 64);
 
 -- -----------------------------------------------------------
 -- 8. Feedback log

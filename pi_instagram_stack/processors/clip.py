@@ -49,7 +49,10 @@ class ClipSelector(BaseProcessor):
             ", ".join(game_titles) if game_titles else "Unknown / general gaming"
         )
 
-        prompt = CLIP_SELECTION_PROMPT.format(
+        from config.prompts.loader import skill
+        prompt = skill(
+            "clip",
+            section="user",
             script_text=script_text[:1500],
             content_type=content_type,
             duration=int(duration),
@@ -59,9 +62,9 @@ class ClipSelector(BaseProcessor):
         try:
             raw = self.gemini.generate_json(
                 prompt=prompt,
-                system_instruction=CLIP_SYSTEM_PROMPT,
+                system_prompt=CLIP_SYSTEM_PROMPT,
             )
-            result = json.loads(raw)
+            result = raw if isinstance(raw, dict) else json.loads(raw)
         except (json.JSONDecodeError, Exception) as e:
             logger.warning("Clip selection JSON failed: %s. Using fallback.", e)
             result = self._fallback_clips(
@@ -102,7 +105,7 @@ class ClipSelector(BaseProcessor):
 
         try:
             raw = self.gemini.generate_json(prompt=prompt)
-            titles = json.loads(raw)
+            titles = raw if isinstance(raw, list) else json.loads(raw) if isinstance(raw, str) else []
             if isinstance(titles, list):
                 return [str(t) for t in titles if t]
         except Exception as e:

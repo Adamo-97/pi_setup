@@ -60,9 +60,9 @@ def main(script_id: str, voiceover_id: str, footage_id: str) -> dict:
     if not vo_rows:
         raise ValueError(f"Voiceover not found: {voiceover_id}")
 
-    vo_path = vo_rows[0][0]
-    vo_duration = vo_rows[0][1]
-    word_timestamps_raw = vo_rows[0][2]
+    vo_path = vo_rows[0]["file_path"]
+    vo_duration = vo_rows[0]["duration"]
+    word_timestamps_raw = vo_rows[0]["word_timestamps"]
 
     # Parse word timestamps
     if isinstance(word_timestamps_raw, str):
@@ -81,8 +81,8 @@ def main(script_id: str, voiceover_id: str, footage_id: str) -> dict:
     if not ft_rows:
         raise ValueError(f"Footage not found: {footage_id}")
 
-    footage_path = ft_rows[0][0]
-    game_title = ft_rows[0][1] or "instagram_reel"
+    footage_path = ft_rows[0]["file_path"]
+    game_title = ft_rows[0]["game_title"] or "instagram_reel"
 
     # Verify files exist
     if not Path(vo_path).is_file():

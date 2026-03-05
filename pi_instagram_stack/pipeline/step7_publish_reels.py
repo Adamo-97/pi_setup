@@ -63,12 +63,12 @@ def main(video_id: str, mode: str = "notify") -> dict:
         raise ValueError(f"Video not found: {video_id}")
 
     row = rows[0]
-    script_id = row[1]
-    video_path = row[2]
-    duration = row[3]
-    video_status = row[4]
-    script_text = row[5]
-    content_type = row[6]
+    script_id = row["script_id"]
+    video_path = row["file_path"]
+    duration = row["duration"]
+    video_status = row["status"]
+    script_text = row["script_text"]
+    content_type = row["content_type"]
 
     if not Path(video_path).is_file():
         raise FileNotFoundError(f"Video file missing: {video_path}")

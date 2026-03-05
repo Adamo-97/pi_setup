@@ -50,8 +50,8 @@ def main(script_id: str) -> dict:
     if not rows:
         raise ValueError(f"Script not found: {script_id}")
 
-    script_text = rows[0][1]
-    status = rows[0][2]
+    script_text = rows[0]["script_text"]
+    status = rows[0]["status"]
 
     if status not in ("validated", "draft"):
         logger.warning("Script status is '%s' (expected 'validated')", status)

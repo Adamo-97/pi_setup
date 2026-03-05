@@ -18,7 +18,7 @@ logger = logging.getLogger("instagram.rag")
 class RAGManager:
     """Manages all RAG operations against the rag_embeddings table."""
 
-    EMBEDDING_DIM = 768
+    EMBEDDING_DIM = 3072
 
     # ---- Store --------------------------------------------------------
 

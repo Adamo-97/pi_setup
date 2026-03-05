@@ -295,7 +295,7 @@ class NewsScraper:
         if not article_ids:
             return
         execute_query(
-            "UPDATE news_articles SET used = TRUE WHERE id = ANY(%s)",
+            "UPDATE news_articles SET used = TRUE WHERE id = ANY(%s::uuid[])",
             (article_ids,),
             fetch=False,
         )

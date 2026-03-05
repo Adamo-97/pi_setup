@@ -83,7 +83,7 @@ class SEO(BaseProcessor):
 
         raw = self.gemini.generate_json(
             prompt=prompt,
-            system_instruction=SEO_SYSTEM_PROMPT,
+            system_prompt=SEO_SYSTEM_PROMPT,
         )
 
         # Sanitise / provide defaults for any missing keys

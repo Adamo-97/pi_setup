@@ -30,6 +30,11 @@ class ElevenLabsService:
         self._model = cfg.model
         self._output_format = cfg.output_format
         self._sample_rate = cfg.sample_rate
+        if not self._api_key or not self._voice_id:
+            raise RuntimeError(
+                "ElevenLabs API key and voice ID are required. "
+                "Set ELEVENLABS_API_KEY and ELEVENLABS_VOICE_ID in .env"
+            )
 
     def _headers(self) -> Dict[str, str]:
         return {

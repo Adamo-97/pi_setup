@@ -52,9 +52,9 @@ def main(script_id: str, auto_revise: bool = True) -> dict:
         raise ValueError(f"Script not found: {script_id}")
 
     row = rows[0]
-    script_text = row[1]
-    content_type = row[2]
-    news_ids = row[3]
+    script_text = row["script_text"]
+    content_type = row["content_type"]
+    news_ids = row["news_ids"]
 
     # Get news summaries for accuracy checking
     news_summaries = ""
@@ -66,7 +66,7 @@ def main(script_id: str, auto_revise: bool = True) -> dict:
                 fetch=True,
             )
             if news_rows:
-                news_summaries = "\n".join(f"- {r[0]}: {r[1][:200]}" for r in news_rows)
+                news_summaries = "\n".join(f"- {r['title']}: {r['summary'][:200]}" for r in news_rows)
         except Exception:
             pass
 

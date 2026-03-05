@@ -50,8 +50,8 @@ def main(script_id: str) -> dict:
     if not rows:
         raise ValueError(f"Script not found: {script_id}")
 
-    script_text = rows[0][1]
-    content_type = rows[0][2]
+    script_text = rows[0]["script_text"]
+    content_type = rows[0]["content_type"]
 
     # Get voiceover duration
     vo_rows = execute_query(
@@ -59,7 +59,7 @@ def main(script_id: str) -> dict:
         (script_id,),
         fetch=True,
     )
-    target_duration = vo_rows[0][0] if vo_rows else 45.0
+    target_duration = vo_rows[0]["duration"] if vo_rows else 45.0
 
     # Use ClipSelector to plan footage
     clip_agent = ClipSelector()

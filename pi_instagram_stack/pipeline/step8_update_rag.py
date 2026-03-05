@@ -70,12 +70,12 @@ def main(
         raise ValueError(f"Video not found: {video_id}")
 
     row = rows[0]
-    script_id = str(row[1])
-    video_status = row[2]
-    script_text = row[3]
-    content_type = row[4]
-    overall_score = row[5] or 0
-    scores = row[6] or {}
+    script_id = str(row["script_id"])
+    video_status = row["status"]
+    script_text = row["script_text"]
+    content_type = row["content_type"]
+    overall_score = row["overall_score"] or 0
+    scores = row["scores"] or {}
 
     # Parse scores if string
     if isinstance(scores, str):
@@ -90,9 +90,9 @@ def main(
     try:
         embedding = embed_text(script_text[:2000])
         rag.store_embedding(
-            text=script_text[:2000],
+            source_type=content_type,
+            content_text=script_text[:2000],
             embedding=embedding,
-            content_type=content_type,
             metadata={
                 "script_id": script_id,
                 "video_id": video_id,
@@ -108,12 +108,14 @@ def main(
     # 2. Store feedback if provided
     if feedback:
         try:
+            feedback_embedding = embed_text(feedback[:500])
             rag.store_feedback(
                 script_id=script_id,
                 video_id=video_id,
                 feedback_text=feedback,
                 feedback_type=feedback_type,
-                content_type=content_type,
+                embedding=feedback_embedding,
+                source="pipeline",
             )
             updates_done.append("feedback")
             logger.info("Stored feedback: %s (%s)", feedback[:50], feedback_type)
@@ -124,12 +126,14 @@ def main(
     if overall_score > 0:
         auto_feedback = _generate_auto_feedback(overall_score, scores, content_type)
         try:
+            auto_embedding = embed_text(auto_feedback[:500])
             rag.store_feedback(
                 script_id=script_id,
                 video_id=video_id,
                 feedback_text=auto_feedback,
                 feedback_type="auto",
-                content_type=content_type,
+                embedding=auto_embedding,
+                source="pipeline",
             )
             updates_done.append("auto_feedback")
         except Exception as e:
