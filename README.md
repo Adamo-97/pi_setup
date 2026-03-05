@@ -16,12 +16,15 @@ Raspberry Pi 5 — stack index.
 
 ## n8n Workflow Downloads
 
-Start a temporary HTTP server on the Pi, then grab the JSON file:
+The workflow JSON files are served from the Pi on demand. Run this **once before importing**, then kill it when done.
 
+**Start the server:**
 ```bash
-# On the Pi — run from /home/adam/pi_setup
 cd /home/adam/pi_setup && python3 -m http.server 8899 &
-# Kill when done
+```
+
+**Kill when done:**
+```bash
 pkill -f "http.server 8899"
 ```
 
