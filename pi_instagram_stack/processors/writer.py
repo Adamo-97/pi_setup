@@ -79,7 +79,7 @@ class Writer(BaseProcessor):
             try:
                 raw = self.gemini.generate_text(
                     prompt=prompt,
-                    system_instruction=WRITER_SYSTEM_PROMPT,
+                    system_prompt=WRITER_SYSTEM_PROMPT,
                 )
                 script_text = self.clean_script(raw)
 

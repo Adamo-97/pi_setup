@@ -50,23 +50,12 @@ class BaseProcessor(ABC):
     ) -> str:
         """Retrieve relevant RAG context for the query."""
         try:
-            results = self.rag.get_context_for_content_type(
-                query=query,
+            query_embedding = embed_text(query[:500])
+            return self.rag.get_context_for_content_type(
+                query_embedding=query_embedding,
                 content_type=content_type,
                 top_k=top_k,
             )
-            if not results:
-                return "No previous context available."
-
-            context_parts = []
-            for r in results:
-                context_parts.append(
-                    f"[{r.get('content_type', 'unknown')}] "
-                    f"(score: {r.get('similarity', 0):.2f}) "
-                    f"{r.get('text', '')[:300]}"
-                )
-            return "\n---\n".join(context_parts)
-
         except Exception as e:
             logger.warning("RAG context retrieval failed: %s", e)
             return "RAG context unavailable."
@@ -74,16 +63,9 @@ class BaseProcessor(ABC):
     def get_previous_feedback(self, content_type: str, limit: int = 3) -> str:
         """Get previous feedback for this content type."""
         try:
-            feedback = self.rag.get_previous_feedback(
+            return self.rag.get_previous_feedback(
                 content_type=content_type, limit=limit
             )
-            if not feedback:
-                return "No previous feedback."
-            parts = [
-                f"- [{fb.get('feedback_type', '')}] {fb.get('feedback_text', '')[:200]}"
-                for fb in feedback
-            ]
-            return "\n".join(parts)
         except Exception as e:
             logger.warning("Feedback retrieval failed: %s", e)
             return "Feedback unavailable."
@@ -91,7 +73,10 @@ class BaseProcessor(ABC):
     def check_duplicate(self, text: str, threshold: float = 0.85) -> bool:
         """Check if content is too similar to existing entries."""
         try:
-            return self.rag.check_duplicate(text=text, threshold=threshold)
+            query_embedding = embed_text(text[:500])
+            return self.rag.check_duplicate(
+                query_embedding=query_embedding, threshold=threshold
+            )
         except Exception as e:
             logger.warning("Duplicate check failed: %s", e)
             return False
@@ -150,9 +135,9 @@ class BaseProcessor(ABC):
         try:
             embedding = embed_text(text[:2000])
             self.rag.store_embedding(
-                text=text[:2000],
+                source_type=content_type,
+                content_text=text[:2000],
                 embedding=embedding,
-                content_type=content_type,
                 metadata=metadata or {},
             )
             logger.info("Stored to RAG: %s (%d chars)", content_type, len(text))
