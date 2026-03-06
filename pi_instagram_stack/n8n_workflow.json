@@ -103,7 +103,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// Mattermost sends POST with {context: {action, gate, run_id, ...}}\n// Also support query params for GET fallback\nconst input = $input.first().json;\nconst ctx = input.context || input.body?.context || input.query || input;\nreturn [{ json: {\n  gate: parseInt(ctx.gate ?? '0'),\n  run_id: ctx.run_id || '',\n  action: ctx.action || 'approve'\n}}];"
+        "jsCode": "// Mattermost sends POST with {context: {action, gate, run_id, ...}, post_id, user_name}\n// Also support query params for GET fallback\nconst input = $input.first().json;\nconst ctx = input.context || input.body?.context || input.query || input;\nreturn [{ json: {\n  gate: parseInt(ctx.gate ?? '0'),\n  run_id: ctx.run_id || '',\n  action: ctx.action || 'approve',\n  post_id: input.post_id || input.body?.post_id || '',\n  user_name: input.user_name || input.body?.user_name || ''\n}}];"
       },
       "id": "fadba323-7036-4c1e-b756-c74b3820db62",
       "name": "Parse Gate Approval",
@@ -120,7 +120,7 @@
                 "options": { "caseSensitive": true, "leftValue": "" },
                 "conditions": [
                   {
-                    "leftValue": "={{ $json.gate }}",
+                    "leftValue": "={{ $('Parse Gate Approval').first().json.gate }}",
                     "rightValue": 0,
                     "operator": { "type": "number", "operation": "equals" }
                   }
@@ -135,7 +135,7 @@
                 "options": { "caseSensitive": true, "leftValue": "" },
                 "conditions": [
                   {
-                    "leftValue": "={{ $json.gate }}",
+                    "leftValue": "={{ $('Parse Gate Approval').first().json.gate }}",
                     "rightValue": 1,
                     "operator": { "type": "number", "operation": "equals" }
                   }
@@ -150,7 +150,7 @@
                 "options": { "caseSensitive": true, "leftValue": "" },
                 "conditions": [
                   {
-                    "leftValue": "={{ $json.gate }}",
+                    "leftValue": "={{ $('Parse Gate Approval').first().json.gate }}",
                     "rightValue": 2,
                     "operator": { "type": "number", "operation": "equals" }
                   }
@@ -165,7 +165,7 @@
                 "options": { "caseSensitive": true, "leftValue": "" },
                 "conditions": [
                   {
-                    "leftValue": "={{ $json.gate }}",
+                    "leftValue": "={{ $('Parse Gate Approval').first().json.gate }}",
                     "rightValue": 3,
                     "operator": { "type": "number", "operation": "equals" }
                   }
@@ -180,7 +180,7 @@
                 "options": { "caseSensitive": true, "leftValue": "" },
                 "conditions": [
                   {
-                    "leftValue": "={{ $json.gate }}",
+                    "leftValue": "={{ $('Parse Gate Approval').first().json.gate }}",
                     "rightValue": 4,
                     "operator": { "type": "number", "operation": "equals" }
                   }
@@ -195,7 +195,7 @@
                 "options": { "caseSensitive": true, "leftValue": "" },
                 "conditions": [
                   {
-                    "leftValue": "={{ $json.gate }}",
+                    "leftValue": "={{ $('Parse Gate Approval').first().json.gate }}",
                     "rightValue": 5,
                     "operator": { "type": "number", "operation": "equals" }
                   }
@@ -210,7 +210,7 @@
                 "options": { "caseSensitive": true, "leftValue": "" },
                 "conditions": [
                   {
-                    "leftValue": "={{ $json.gate }}",
+                    "leftValue": "={{ $('Parse Gate Approval').first().json.gate }}",
                     "rightValue": 6,
                     "operator": { "type": "number", "operation": "equals" }
                   }
@@ -232,7 +232,7 @@
     },
     {
       "parameters": {
-        "command": "={{ 'cd /home/node/instagram_stack && python -m pipeline.step1_scrape_news --source all --run-id ' + $json.run_id }}"
+        "command": "={{ 'cd /home/node/instagram_stack && python -m pipeline.step1_scrape_news --source all --run-id ' + $('Parse Gate Approval').first().json.run_id }}"
       },
       "id": "779232ab-30fa-42b5-b2ce-4f4aa7a79c19",
       "name": "1. Scrape News",
@@ -262,7 +262,7 @@
     },
     {
       "parameters": {
-        "command": "={{ 'cd /home/node/instagram_stack && python -m pipeline.step2_generate_script --type trending_news --duration 45 --run-id ' + $json.run_id + ' | tee /tmp/step2_out.txt && python3 -m pipeline.save_state ' + $json.run_id + ' /tmp/step2_out.txt' }}"
+        "command": "={{ 'cd /home/node/instagram_stack && python -m pipeline.step2_generate_script --type trending_news --duration 45 --run-id ' + $('Parse Gate Approval').first().json.run_id + ' | tee /tmp/step2_out.txt && python3 -m pipeline.save_state ' + $('Parse Gate Approval').first().json.run_id + ' /tmp/step2_out.txt' }}"
       },
       "id": "4ceb08cf-b8df-431c-8da9-cb3809ecc273",
       "name": "2. Generate Script",
@@ -312,7 +312,7 @@
     },
     {
       "parameters": {
-        "command": "={{ 'cd /home/node/instagram_stack && eval $(python3 -m pipeline.read_state ' + $json.run_id + ') && python -m pipeline.step4_generate_voiceover --script-id $SCRIPT_ID | tee /tmp/step4_out.txt && python3 -m pipeline.save_state ' + $json.run_id + ' /tmp/step4_out.txt' }}"
+        "command": "={{ 'cd /home/node/instagram_stack && eval $(python3 -m pipeline.read_state ' + $('Parse Gate Approval').first().json.run_id + ') && python -m pipeline.step4_generate_voiceover --script-id $SCRIPT_ID | tee /tmp/step4_out.txt && python3 -m pipeline.save_state ' + $('Parse Gate Approval').first().json.run_id + ' /tmp/step4_out.txt' }}"
       },
       "id": "802f79aa-dd70-4c87-af67-9e0c2218c71a",
       "name": "4. Generate Voiceover",
@@ -342,7 +342,7 @@
     },
     {
       "parameters": {
-        "command": "={{ 'cd /home/node/instagram_stack && eval $(python3 -m pipeline.read_state ' + $json.run_id + ') && python -m pipeline.step5_download_footage --script-id $SCRIPT_ID | tee /tmp/step5_out.txt && python3 -m pipeline.save_state ' + $json.run_id + ' /tmp/step5_out.txt' }}"
+        "command": "={{ 'cd /home/node/instagram_stack && eval $(python3 -m pipeline.read_state ' + $('Parse Gate Approval').first().json.run_id + ') && python -m pipeline.step5_download_footage --script-id $SCRIPT_ID | tee /tmp/step5_out.txt && python3 -m pipeline.save_state ' + $('Parse Gate Approval').first().json.run_id + ' /tmp/step5_out.txt' }}"
       },
       "id": "6b34c2e4-4ac4-4137-a948-468c34fba63c",
       "name": "5. Download Footage",
@@ -372,7 +372,7 @@
     },
     {
       "parameters": {
-        "command": "={{ 'cd /home/node/instagram_stack && eval $(python3 -m pipeline.read_state ' + $json.run_id + ') && python -m pipeline.step6_assemble_video --script-id $SCRIPT_ID --voiceover-id $VOICEOVER_ID --footage-id $FOOTAGE_ID | tee /tmp/step6_out.txt && python3 -m pipeline.save_state ' + $json.run_id + ' /tmp/step6_out.txt' }}"
+        "command": "={{ 'cd /home/node/instagram_stack && eval $(python3 -m pipeline.read_state ' + $('Parse Gate Approval').first().json.run_id + ') && python -m pipeline.step6_assemble_video --script-id $SCRIPT_ID --voiceover-id $VOICEOVER_ID --footage-id $FOOTAGE_ID | tee /tmp/step6_out.txt && python3 -m pipeline.save_state ' + $('Parse Gate Approval').first().json.run_id + ' /tmp/step6_out.txt' }}"
       },
       "id": "82c49502-b979-49f9-9fd4-149468d45373",
       "name": "6. Assemble Video",
@@ -402,7 +402,7 @@
     },
     {
       "parameters": {
-        "command": "={{ 'cd /home/node/instagram_stack && echo ' + JSON.stringify('{\"platform\": \"Instagram\"}') + ' > /tmp/gate_data.json && python -m pipeline.gate_helper --gate 6 --data-file /tmp/gate_data.json --run-id ' + $json.run_id }}"
+        "command": "={{ 'cd /home/node/instagram_stack && echo ' + JSON.stringify('{\"platform\": \"Instagram\"}') + ' > /tmp/gate_data.json && python -m pipeline.gate_helper --gate 6 --data-file /tmp/gate_data.json --run-id ' + $('Parse Gate Approval').first().json.run_id }}"
       },
       "id": "fca1f186-34a5-4f6f-91f3-219183fad347",
       "name": "Gate 6: Publish + Thumbnail",
@@ -412,7 +412,7 @@
     },
     {
       "parameters": {
-        "command": "={{ 'cd /home/node/instagram_stack && eval $(python3 -m pipeline.read_state ' + $json.run_id + ') && python -m pipeline.step7_publish_reels --video-id $VIDEO_ID --mode publish | tee /tmp/step7_out.txt && python3 -m pipeline.save_state ' + $json.run_id + ' /tmp/step7_out.txt' }}"
+        "command": "={{ 'cd /home/node/instagram_stack && eval $(python3 -m pipeline.read_state ' + $('Parse Gate Approval').first().json.run_id + ') && python -m pipeline.step7_publish_reels --video-id $VIDEO_ID --mode publish | tee /tmp/step7_out.txt && python3 -m pipeline.save_state ' + $('Parse Gate Approval').first().json.run_id + ' /tmp/step7_out.txt' }}"
       },
       "id": "7c861e24-e293-4586-a7b3-3b7d4447dc69",
       "name": "7. Publish",
@@ -422,7 +422,7 @@
     },
     {
       "parameters": {
-        "command": "={{ 'cd /home/node/instagram_stack && eval $(python3 -m pipeline.read_state ' + $json.run_id + ') && python -m pipeline.step8_update_rag --video-id $VIDEO_ID' }}"
+        "command": "={{ 'cd /home/node/instagram_stack && eval $(python3 -m pipeline.read_state ' + $('Parse Gate Approval').first().json.run_id + ') && python -m pipeline.step8_update_rag --video-id $VIDEO_ID' }}"
       },
       "id": "a79596d7-2a25-4b5a-b445-afcfb63294a2",
       "name": "8. Update RAG",
@@ -442,13 +442,33 @@
     },
     {
       "parameters": {
-        "jsCode": "// Mattermost sends POST with {context: {action, gate, run_id, ...}}\nconst input = $input.first().json;\nconst ctx = input.context || input.body?.context || input.query || input;\nconst gate = parseInt(ctx.gate || '0');\nconst names = {0:'Plan',1:'News',2:'Script',3:'Voiceover',4:'Footage',5:'Video',6:'Publish'};\nreturn [{json: {success: false, message: '❌ Rejected at Gate ' + gate + ' (' + names[gate] + ').', gate, run_id: ctx.run_id || ''}}];"
+        "command": "={{ 'cd /home/node/instagram_stack && python -m pipeline.update_gate_post --post-id ' + ($('Parse Gate Approval').first().json.post_id || 'none') + ' --gate ' + String($('Parse Gate Approval').first().json.gate || 0) + ' --action approve --user ' + JSON.stringify($('Parse Gate Approval').first().json.user_name || '') }}"
+      },
+      "id": "b2c3d4e5-f6a7-48b9-c0d1-e2f3a4b5c6d7",
+      "name": "Update Post: Approved",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [336, 960]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Mattermost sends POST with {context: {action, gate, run_id, ...}, post_id, user_name}\nconst input = $input.first().json;\nconst ctx = input.context || input.body?.context || input.query || input;\nconst gate = parseInt(ctx.gate || '0');\nconst names = {0:'Plan',1:'News',2:'Script',3:'Voiceover',4:'Footage',5:'Video',6:'Publish'};\nreturn [{json: {success: false, message: '❌ Rejected at Gate ' + gate + ' (' + names[gate] + ').', gate, run_id: ctx.run_id || '', post_id: input.post_id || input.body?.post_id || '', user_name: input.user_name || input.body?.user_name || ''}}];"
       },
       "id": "51a745bd-6298-4902-be6e-1a0fbe8580c0",
       "name": "Handle Rejection",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [224, 1920]
+    },
+    {
+      "parameters": {
+        "command": "={{ 'cd /home/node/instagram_stack && python -m pipeline.update_gate_post --post-id ' + ($json.post_id || 'none') + ' --gate ' + String($json.gate || 0) + ' --action reject --user ' + JSON.stringify($json.user_name || '') }}"
+      },
+      "id": "c3d4e5f6-a7b8-49c0-d1e2-f3a4b5c6d7e8",
+      "name": "Update Post: Rejected",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [448, 1920]
     },
     {
       "parameters": {
@@ -505,6 +525,9 @@
       "main": [[{ "node": "Parse Gate Approval", "type": "main", "index": 0 }]]
     },
     "Parse Gate Approval": {
+      "main": [[{ "node": "Update Post: Approved", "type": "main", "index": 0 }]]
+    },
+    "Update Post: Approved": {
       "main": [[{ "node": "Gate Router", "type": "main", "index": 0 }]]
     },
     "Gate Router": {
@@ -562,6 +585,9 @@
     },
     "Rejection Webhook": {
       "main": [[{ "node": "Handle Rejection", "type": "main", "index": 0 }]]
+    },
+    "Handle Rejection": {
+      "main": [[{ "node": "Update Post: Rejected", "type": "main", "index": 0 }]]
     },
     "Comment Webhook": {
       "main": [[{ "node": "Parse Comment", "type": "main", "index": 0 }]]

@@ -96,6 +96,11 @@ services:
       MM_SERVICESETTINGS_ENABLEPOSTICONOVERRIDE: "true"
       MM_SERVICESETTINGS_ENABLECUSTOMEMOJI: "true"
 
+      # ── Interactive Message Buttons → n8n Webhooks ──
+      # Allow Mattermost to POST to internal IPs when action buttons are clicked.
+      # Without this, interactive message button webhooks to 192.168.x.x are blocked.
+      MM_SERVICESETTINGS_ALLOWEDUNTRUSTEDINTERNALCONNECTIONS: "192.168.0.11 100.113.255.62"
+
       # ── File Storage (local, on NVMe) ──
       MM_FILESETTINGS_DRIVERNAME: local
       MM_FILESETTINGS_DIRECTORY: /mattermost/data

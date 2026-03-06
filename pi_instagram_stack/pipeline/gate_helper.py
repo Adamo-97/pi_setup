@@ -79,14 +79,18 @@ def main():
     display_data = {k: v for k, v in gate_data.items()
                     if k not in ("file_path", "output_path", "word_timestamps")}
 
-    mm.send_gate_approval(
+    post_id = mm.send_gate_approval(
         gate_number=args.gate,
         summary=title,
         details=display_data,
         run_id=args.run_id,
         file_paths=file_paths,
     )
-    print(json.dumps({"status": "sent", "gate": args.gate, "channel": channel_map.get(mm.GATE_CHANNEL_KEYS.get(args.gate, "plan"), "")}))
+    channel = channel_map.get(mm.GATE_CHANNEL_KEYS.get(args.gate, "plan"), "")
+    result = {"status": "sent" if post_id else "failed", "gate": args.gate, "channel": channel}
+    if post_id:
+        result["post_id"] = post_id
+    print(json.dumps(result))
 
 
 if __name__ == "__main__":

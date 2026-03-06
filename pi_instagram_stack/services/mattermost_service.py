@@ -104,8 +104,8 @@ class MattermostService:
         props: Optional[dict] = None,
         file_ids: Optional[list] = None,
         channel_id: Optional[str] = None,
-    ) -> bool:
-        """Create a post in a Mattermost channel. Uses override or default."""
+    ) -> Optional[str]:
+        """Create a post in a Mattermost channel. Returns post_id on success, None on failure."""
         target_channel = channel_id or self.channel_id
         payload: Dict[str, Any] = {
             "channel_id": target_channel,
@@ -124,16 +124,17 @@ class MattermostService:
                 timeout=30,
             )
             if resp.status_code in (200, 201):
-                logger.info("Mattermost message sent -> channel %s", target_channel[:8])
-                return True
+                post_id = resp.json().get("id", "")
+                logger.info("Mattermost message sent -> channel %s (post %s)", target_channel[:8], post_id[:8])
+                return post_id
             else:
                 logger.error(
                     "Mattermost send failed: %d %s", resp.status_code, resp.text[:200]
                 )
-                return False
+                return None
         except Exception as e:
             logger.error("Mattermost send error: %s", e)
-            return False
+            return None
 
     def _upload_file(self, file_path: str, channel_id: Optional[str] = None) -> Optional[str]:
         """Upload a file and return its Mattermost file ID."""
@@ -261,6 +262,7 @@ class MattermostService:
                     "actions": [
                         {
                             "id": f"approve_gate_{gate_number}",
+                            "type": "button",
                             "name": "\u2705 \u0645\u0648\u0627\u0641\u0642\u0629",
                             "integration": {
                                 "url": approve_url,
@@ -274,6 +276,7 @@ class MattermostService:
                         },
                         {
                             "id": f"reject_gate_{gate_number}",
+                            "type": "button",
                             "name": "\u274c \u0631\u0641\u0636",
                             "style": "danger",
                             "integration": {
@@ -288,6 +291,7 @@ class MattermostService:
                         },
                         {
                             "id": f"comment_gate_{gate_number}",
+                            "type": "button",
                             "name": "\U0001f4ac \u062a\u0639\u0644\u064a\u0642",
                             "integration": {
                                 "url": comment_url,
@@ -305,6 +309,84 @@ class MattermostService:
         }
 
         return self._post_message(message, props=props, file_ids=uploaded_file_ids, channel_id=target_channel)
+
+    # ================================================================
+    # Post-action updates (visual feedback after button click)
+    # ================================================================
+
+    def update_post_actions(
+        self,
+        post_id: str,
+        action: str,
+        gate_number: int,
+        user_name: str = "",
+        comment: str = "",
+    ) -> bool:
+        """
+        Replace the interactive buttons on a gate message with a status banner.
+
+        Called by n8n after the user clicks Approve/Reject. This ensures:
+        - Buttons are removed (prevents double-click)
+        - Visual feedback shows what happened and who did it
+        """
+        if action == "approve":
+            status_text = f"✅ **تمت الموافقة** بواسطة {user_name}" if user_name else "✅ **تمت الموافقة**"
+            color = "#4CAF50"
+        elif action == "reject":
+            status_text = f"❌ **تم الرفض** بواسطة {user_name}" if user_name else "❌ **تم الرفض**"
+            color = "#d00000"
+        else:
+            status_text = f"💬 **تعليق** من {user_name}" if user_name else "💬 **تعليق مُرسَل**"
+            color = "#FF9800"
+
+        if comment:
+            status_text += f"\n> {comment}"
+
+        try:
+            # First, get the current post to preserve the message
+            resp = requests.get(
+                f"{self.base_url}/api/v4/posts/{post_id}",
+                headers=self._headers,
+                timeout=15,
+            )
+            if resp.status_code != 200:
+                logger.error("Failed to get post %s for update: %d", post_id[:8], resp.status_code)
+                return False
+
+            post_data = resp.json()
+
+            # Replace actions with a static status attachment (no buttons)
+            updated_props = {
+                "attachments": [
+                    {
+                        "color": color,
+                        "text": status_text,
+                    }
+                ]
+            }
+
+            # Update the post props to remove buttons
+            update_payload = {
+                "id": post_id,
+                "message": post_data.get("message", ""),
+                "props": updated_props,
+            }
+
+            resp = requests.put(
+                f"{self.base_url}/api/v4/posts/{post_id}",
+                json=update_payload,
+                headers=self._headers,
+                timeout=15,
+            )
+            if resp.status_code == 200:
+                logger.info("Post %s updated: %s gate %d", post_id[:8], action, gate_number)
+                return True
+            else:
+                logger.error("Failed to update post %s: %d %s", post_id[:8], resp.status_code, resp.text[:200])
+                return False
+        except Exception as e:
+            logger.error("Post update error: %s", e)
+            return False
 
     # ================================================================
     # Send approval request (legacy - kept for compatibility)
@@ -365,6 +447,7 @@ class MattermostService:
                     "actions": [
                         {
                             "id": "approve_instagram",
+                            "type": "button",
                             "name": "\u2705 Approve & Publish",
                             "integration": {
                                 "url": approve_url,
@@ -377,6 +460,7 @@ class MattermostService:
                         },
                         {
                             "id": "reject_instagram",
+                            "type": "button",
                             "name": "\u274c Reject",
                             "style": "danger",
                             "integration": {
@@ -393,7 +477,7 @@ class MattermostService:
             ]
         }
 
-        return self._post_message(message, props=props, file_ids=file_ids, channel_id=target_channel)
+        return bool(self._post_message(message, props=props, file_ids=file_ids, channel_id=target_channel))
 
     # ================================================================
     # Status notifications
@@ -408,10 +492,10 @@ class MattermostService:
             "error": ":x:",
         }.get(level, ":information_source:")
         target = self._resolve_channel(channel_key=channel_key) if channel_key else self.channel_id
-        return self._post_message(
+        return bool(self._post_message(
             f"{emoji} **Instagram Reels Pipeline:** {message}",
             channel_id=target,
-        )
+        ))
 
     def send_publish_confirmation(
         self,
@@ -429,7 +513,7 @@ class MattermostService:
             f"| **Buffer ID** | `{buffer_update_id[:12]}...` |\n"
             f"| **Video** | `{video_id[:8]}...` |\n"
         )
-        return self._post_message(message, channel_id=target_channel)
+        return bool(self._post_message(message, channel_id=target_channel))
 
     def send_error(self, step: str, error: str) -> bool:
         """Send pipeline error alert to the plan channel."""
@@ -439,4 +523,4 @@ class MattermostService:
             f"**Step:** {step}\n\n"
             f"**Error:**\n```\n{error}\n```"
         )
-        return self._post_message(message, channel_id=target_channel)
+        return bool(self._post_message(message, channel_id=target_channel))
