@@ -4,11 +4,11 @@
 # Single n8n instance serving all content pipelines:
 #   Instagram, TikTok, X/Twitter, YouTube
 #
-# Each pipeline stack exposes its Docker network so n8n can reach
-# postgres/redis containers by hostname (e.g., postgres_instagram).
+# Uses host networking so n8n can reach both external APIs (Gemini, etc.)
+# and local services (postgres, redis) via localhost:<host-port>.
 #
 # Usage:
-#   1. Start at least one pipeline stack first (so its network exists)
+#   1. Start at least one pipeline stack first
 #   2. docker compose up -d
 #   3. Open http://<pi-ip>:5678
 #   4. Import each pipeline's n8n_workflow.json
@@ -23,8 +23,7 @@ services:
     image: n8n-python:local
     container_name: n8n
     restart: unless-stopped
-    ports:
-      - "5678:5678"
+    network_mode: host
     env_file:
       # Each pipeline's .env is loaded so inline gate commands
       # (python -c "... os.environ['MATTERMOST_URL'] ...") work.
@@ -57,11 +56,10 @@ services:
       EXECUTIONS_DATA_SAVE_ON_ERROR: all
       EXECUTIONS_DATA_SAVE_ON_SUCCESS: all
       EXECUTIONS_DATA_SAVE_MANUAL_EXECUTIONS: "true"
-      # --- Docker host overrides (override .env values that use localhost) ----
-      # Inside the n8n container, services are reachable by Docker hostname.
-      DB_HOST: postgres_instagram
-      DB_PORT: "5432"
-      REDIS_URL: redis://redis_instagram:6379
+      # --- Host-mode networking -----------------------------------------------
+      # With network_mode: host, services are on localhost at their host ports.
+      # The .env already has DB_HOST=localhost, DB_PORT=5435, REDIS_URL with 6381,
+      # so no overrides needed — .env values are correct for host networking.
     volumes:
       # Persistent n8n data (workflows, credentials, sqlite db)
       - n8n_data:/home/node/.n8n
@@ -74,13 +72,6 @@ services:
       - ../pi_x_stack/output:/home/node/x_stack/output:rw
       - ../pi_youtube_stack:/home/node/youtube_stack:ro
       - ../pi_youtube_stack/output:/home/node/youtube_stack/output:rw
-    networks:
-      - n8n_net
-      - instagram_stack_net
-      # Uncomment each when you deploy that stack:
-      # - tiktok_stack_net
-      # - x_stack_net
-      # - youtube_stack_net
     deploy:
       resources:
         limits:
@@ -95,17 +86,3 @@ services:
 volumes:
   n8n_data:
     driver: local
-
-# External networks — created by each pipeline's docker-compose
-networks:
-  n8n_net:
-    driver: bridge
-  instagram_stack_net:
-    external: true
-  # Uncomment each when you deploy that stack:
-  # tiktok_stack_net:
-  #   external: true
-  # x_stack_net:
-  #   external: true
-  # youtube_stack_net:
-  #   external: true
