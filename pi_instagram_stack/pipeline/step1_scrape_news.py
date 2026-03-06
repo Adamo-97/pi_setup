@@ -64,10 +64,21 @@ def main(source: str = "all") -> dict:
         # Count available unused articles
         unused = scraper.get_unused_articles(limit=100)
 
+        # Build detailed article summaries for gate notification
+        article_details = []
+        for a in articles[:10]:
+            article_details.append({
+                "title": a.get("title", "N/A"),
+                "source": a.get("source", "unknown"),
+                "summary": (a.get("summary", "") or "")[:200],
+                "source_url": a.get("source_url", ""),
+            })
+
         result = {
             "scraped": len(articles),
             "stored": stored,
             "total_unused": len(unused),
+            "articles": article_details,
             "source": source,
             "timestamp": datetime.now().isoformat(),
         }

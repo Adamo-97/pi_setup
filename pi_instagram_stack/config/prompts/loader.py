@@ -26,11 +26,15 @@ import re
 from pathlib import Path
 
 _SKILLS_DIR = Path(__file__).parent / "skills"
+_CUSTOM_DIR = _SKILLS_DIR / "custom"
 
 
 def skill(name: str, section: str | None = None, **kwargs) -> str:
     """
     Load a prompt skill from skills/<name>.md.
+
+    Checks skills/custom/<name>.md first (user overrides), then
+    falls back to skills/<name>.md (built-in defaults).
 
     Args:
         name:     Filename without extension (e.g. "planner").
@@ -44,11 +48,19 @@ def skill(name: str, section: str | None = None, **kwargs) -> str:
         FileNotFoundError: If the skill file does not exist.
         ValueError:        If the requested section is not found.
     """
-    path = _SKILLS_DIR / f"{name}.md"
-    if not path.exists():
+    # Check custom overrides first, then built-in defaults
+    custom_path = _CUSTOM_DIR / f"{name}.md"
+    default_path = _SKILLS_DIR / f"{name}.md"
+
+    if custom_path.exists():
+        path = custom_path
+    elif default_path.exists():
+        path = default_path
+    else:
         available = [p.stem for p in _SKILLS_DIR.glob("*.md")]
+        custom = [p.stem for p in _CUSTOM_DIR.glob("*.md")] if _CUSTOM_DIR.exists() else []
         raise FileNotFoundError(
-            f"Skill '{name}' not found. Available: {available}"
+            f"Skill '{name}' not found. Built-in: {available}. Custom: {custom}"
         )
     text = path.read_text(encoding="utf-8")
 
@@ -82,5 +94,14 @@ def _extract_section(text: str, section: str, name: str) -> str:
 
 
 def list_skills() -> list:
-    """Return names of all available skill files."""
-    return sorted(p.stem for p in _SKILLS_DIR.glob("*.md"))
+    """Return names of all available skill files (built-in + custom)."""
+    builtin = {p.stem for p in _SKILLS_DIR.glob("*.md")}
+    custom = {p.stem for p in _CUSTOM_DIR.glob("*.md")} if _CUSTOM_DIR.exists() else set()
+    return sorted(builtin | custom)
+
+
+def list_custom_skills() -> list:
+    """Return names of custom override skill files."""
+    if not _CUSTOM_DIR.exists():
+        return []
+    return sorted(p.stem for p in _CUSTOM_DIR.glob("*.md"))

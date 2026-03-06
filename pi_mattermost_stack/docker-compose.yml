@@ -79,9 +79,13 @@ services:
       # ── Mobile Push Notifications (Mattermost TPNS — free test server) ──
       # Works with the standard Play Store / App Store Mattermost app.
       # Limit: 100 notifications/day (plenty for personal use).
+      # "full" sends message content in the push payload so notifications
+      # arrive even when the phone is off-LAN (vs "id_loaded" which requires
+      # the app to fetch content from the server).
       MM_EMAILSETTINGS_SENDPUSHNOTIFICATIONS: "true"
       MM_EMAILSETTINGS_PUSHNOTIFICATIONSERVER: "https://push-test.mattermost.com"
-      MM_EMAILSETTINGS_PUSHNOTIFICATIONCONTENTS: "id_loaded"
+      MM_EMAILSETTINGS_PUSHNOTIFICATIONCONTENTS: "full"
+      MM_EMAILSETTINGS_PUSHNOTIFICATIONBUFFER: "1000"
 
       # ── Bot & Integration Settings ──
       MM_SERVICESETTINGS_ENABLEBOTACCOUNTCREATION: "true"

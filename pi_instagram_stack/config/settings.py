@@ -56,7 +56,26 @@ class DatabaseConfig:
 class MattermostConfig:
     url: str = ""
     bot_token: str = ""
-    channel_id: str = ""
+    channel_id: str = ""  # legacy fallback
+    channel_plan: str = ""
+    channel_news: str = ""
+    channel_script: str = ""
+    channel_voiceover: str = ""
+    channel_footage: str = ""
+    channel_video: str = ""
+    channel_publish: str = ""
+
+    def channel_for_gate(self, gate: int) -> str:
+        """Return the Mattermost channel ID for a given gate number."""
+        gate_map = {
+            0: self.channel_plan,
+            1: self.channel_news,
+            2: self.channel_script,
+            3: self.channel_voiceover,
+            4: self.channel_video,      # footage → video assembly channel
+            5: self.channel_publish,
+        }
+        return gate_map.get(gate, self.channel_id) or self.channel_id
 
 
 @dataclass(frozen=True)
@@ -245,6 +264,13 @@ class _Settings:
             url=e("MATTERMOST_URL", ""),
             bot_token=e("MATTERMOST_BOT_TOKEN", ""),
             channel_id=e("MATTERMOST_CHANNEL_ID", ""),
+            channel_plan=e("MATTERMOST_CHANNEL_PLAN_ID", ""),
+            channel_news=e("MATTERMOST_CHANNEL_NEWS_ID", ""),
+            channel_script=e("MATTERMOST_CHANNEL_SCRIPT_ID", ""),
+            channel_voiceover=e("MATTERMOST_CHANNEL_VOICEOVER_ID", ""),
+            channel_footage=e("MATTERMOST_CHANNEL_FOOTAGE_ID", ""),
+            channel_video=e("MATTERMOST_CHANNEL_VIDEO_ID", ""),
+            channel_publish=e("MATTERMOST_CHANNEL_PUBLISH_ID", ""),
         )
         self.buffer = BufferConfig(
             access_token=e("BUFFER_ACCESS_TOKEN", ""),

@@ -61,6 +61,9 @@ class Writer(BaseProcessor):
         feedback = self.get_previous_feedback(content_type)
         target_words = self.target_word_count(target_duration)
 
+        # Check for revision feedback (from validator loop)
+        revision_feedback = kwargs.get("revision_feedback", "")
+
         # Get prompt template
         prompt_template = WRITER_PROMPTS.get(
             content_type, WRITER_PROMPTS["trending_news"]
@@ -72,6 +75,13 @@ class Writer(BaseProcessor):
             target_duration=int(target_duration),
             word_count=target_words,
         )
+
+        # Append revision feedback if this is a revision run
+        if revision_feedback:
+            prompt += (
+                "\n\n## ملاحظات المراجع (يجب تطبيقها):\n"
+                f"{revision_feedback}\n"
+            )
 
         # Generate with retries
         script_text = None

@@ -25,10 +25,10 @@ logger = logging.getLogger("instagram.validator")
 class Validator(BaseProcessor):
     """AI quality gate for Instagram Reels scripts."""
 
-    # Auto-reject threshold
-    MIN_OVERALL_SCORE = 70
-    MIN_HOOK_SCORE = 60
-    MAX_REVISIONS = 2
+    # Auto-reject threshold — 90+ required for approval
+    MIN_OVERALL_SCORE = 90
+    MIN_HOOK_SCORE = 70
+    MAX_REVISIONS = 10
 
     def __init__(self):
         super().__init__(name="Validator (Instagram)")
@@ -182,15 +182,23 @@ class Validator(BaseProcessor):
                     result["overall_score"],
                 )
 
-                # Build revision prompt
+                # Build revision feedback from validator issues
                 issues = "\n".join(f"- {i}" for i in result["critical_issues"])
                 suggestions = "\n".join(f"- {s}" for s in result["suggestions"])
+                revision_feedback = (
+                    f"السكريبت السابق حصل على {result['overall_score']}/100.\n"
+                    f"المشاكل:\n{issues}\n"
+                    f"الاقتراحات:\n{suggestions}\n"
+                    f"النص السابق:\n{current_text[:500]}\n"
+                    f"أعد كتابة السكريبت مع تطبيق كل الملاحظات."
+                )
 
                 revision_result = writer_agent.run(
                     content_type=content_type,
                     news_articles=[],
                     target_duration=45.0,
                     trigger_source="revision",
+                    revision_feedback=revision_feedback,
                 )
                 current_text = revision_result["script_text"]
                 current_id = revision_result["script_id"]
