@@ -2,8 +2,9 @@
 """
 Gemini Service
 ==============
-Wrapper around Google Generative AI for text generation, JSON output,
-and embedding creation.
+Direct REST wrapper for Google Gemini API.
+Uses requests instead of the deprecated google.generativeai SDK
+to avoid hangs on ARM/Pi with newer models (gemini-3.x).
 """
 
 import json
@@ -12,23 +13,26 @@ import re
 import time
 from typing import Any, Dict, List, Optional
 
-import google.generativeai as genai
+import requests
 
 from config.settings import settings
 
 logger = logging.getLogger("instagram.gemini")
 
+_BASE = "https://generativelanguage.googleapis.com/v1beta"
+
 
 class GeminiService:
-    """Google Gemini AI client for the Instagram Reels pipeline."""
+    """Google Gemini AI client for the Instagram Reels pipeline (REST)."""
 
     def __init__(self):
         cfg = settings.gemini
-        genai.configure(api_key=cfg.api_key)
-        self._model = genai.GenerativeModel(cfg.model)
+        self._api_key = cfg.api_key
+        self._model = cfg.model
         self._embed_model = cfg.embedding_model
         self._temperature = cfg.temperature
         self._max_tokens = cfg.max_output_tokens
+        self._timeout = 120  # seconds per API call
 
     # ================================================================
     # Text generation
@@ -41,31 +45,37 @@ class GeminiService:
         temperature: Optional[float] = None,
         max_retries: int = 2,
     ) -> str:
-        """Generate text using Gemini."""
-        temp = temperature or self._temperature
-        config = genai.types.GenerationConfig(
-            temperature=temp,
-            max_output_tokens=self._max_tokens,
-        )
+        """Generate text using Gemini REST API."""
+        temp = temperature if temperature is not None else self._temperature
 
         contents = []
         if system_prompt:
-            contents.append({"role": "user", "parts": [system_prompt]})
+            contents.append({"role": "user", "parts": [{"text": system_prompt}]})
             contents.append(
-                {
-                    "role": "model",
-                    "parts": ["understood, I will follow these instructions."],
-                }
+                {"role": "model", "parts": [{"text": "understood, I will follow these instructions."}]}
             )
-        contents.append({"role": "user", "parts": [prompt]})
+        contents.append({"role": "user", "parts": [{"text": prompt}]})
+
+        payload = {
+            "contents": contents,
+            "generationConfig": {
+                "temperature": temp,
+                "maxOutputTokens": self._max_tokens,
+            },
+        }
+
+        url = f"{_BASE}/models/{self._model}:generateContent?key={self._api_key}"
 
         for attempt in range(max_retries + 1):
             try:
-                response = self._model.generate_content(
-                    contents,
-                    generation_config=config,
-                )
-                return response.text
+                resp = requests.post(url, json=payload, timeout=self._timeout)
+                resp.raise_for_status()
+                data = resp.json()
+                candidates = data.get("candidates", [])
+                if not candidates:
+                    err = data.get("error", {}).get("message", "No candidates returned")
+                    raise RuntimeError(f"Gemini returned no candidates: {err}")
+                return candidates[0]["content"]["parts"][0]["text"]
             except Exception as e:
                 logger.warning("Gemini attempt %d failed: %s", attempt + 1, e)
                 if attempt < max_retries:
@@ -88,7 +98,7 @@ class GeminiService:
         raw = self.generate_text(
             prompt=prompt,
             system_prompt=system_prompt,
-            temperature=temperature or 0.3,
+            temperature=temperature if temperature is not None else 0.3,
             max_retries=max_retries,
         )
 
@@ -103,27 +113,39 @@ class GeminiService:
     # ================================================================
 
     def generate_embedding(self, text: str) -> List[float]:
-        """Generate a single embedding vector."""
-        result = genai.embed_content(
-            model=self._embed_model,
-            content=text,
-            task_type="retrieval_document",
-        )
-        return result["embedding"]
+        """Generate a single embedding vector via REST."""
+        url = f"{_BASE}/{self._embed_model}:embedContent?key={self._api_key}"
+        payload = {
+            "model": self._embed_model,
+            "content": {"parts": [{"text": text}]},
+            "taskType": "RETRIEVAL_DOCUMENT",
+        }
+        resp = requests.post(url, json=payload, timeout=self._timeout)
+        resp.raise_for_status()
+        return resp.json()["embedding"]["values"]
 
     def generate_embeddings_batch(
         self, texts: List[str], batch_size: int = 20
     ) -> List[List[float]]:
-        """Generate embeddings for a batch of texts."""
-        all_embeddings = []
+        """Generate embeddings for a batch of texts via REST."""
+        url = f"{_BASE}/{self._embed_model}:batchEmbedContents?key={self._api_key}"
+        all_embeddings: List[List[float]] = []
         for i in range(0, len(texts), batch_size):
             batch = texts[i : i + batch_size]
-            result = genai.embed_content(
-                model=self._embed_model,
-                content=batch,
-                task_type="retrieval_document",
+            requests_list = [
+                {
+                    "model": self._embed_model,
+                    "content": {"parts": [{"text": t}]},
+                    "taskType": "RETRIEVAL_DOCUMENT",
+                }
+                for t in batch
+            ]
+            resp = requests.post(
+                url, json={"requests": requests_list}, timeout=self._timeout
             )
-            all_embeddings.extend(result["embedding"])
+            resp.raise_for_status()
+            for emb in resp.json()["embeddings"]:
+                all_embeddings.append(emb["values"])
             if i + batch_size < len(texts):
                 time.sleep(0.5)
         return all_embeddings
