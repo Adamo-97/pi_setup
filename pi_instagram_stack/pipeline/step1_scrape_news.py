@@ -128,6 +128,8 @@ def _finish_pipeline_run(run_id: str, status: str, details: dict = None):
 
 
 if __name__ == "__main__":
+    import json as _json
+
     parser = argparse.ArgumentParser(description="Scrape gaming & hardware news")
     parser.add_argument(
         "--source",
@@ -137,4 +139,5 @@ if __name__ == "__main__":
     )
     parser.add_argument("--run-id", default=None, help="n8n run ID (ignored, for tracking)")
     args = parser.parse_args()
-    main(source=args.source)
+    result = main(source=args.source)
+    print(_json.dumps(result, ensure_ascii=False))
