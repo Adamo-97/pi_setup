@@ -196,7 +196,7 @@ class MattermostService:
                     "color": "#2196F3" if gate_number < 5 else "#4CAF50",
                     "actions": [
                         {
-                            "id": f"approve_gate_{gate_number}",
+                            "id": f"approveGate{gate_number}",
                             "name": "✅ موافقة",
                             "integration": {
                                 "url": approve_url,
@@ -209,7 +209,7 @@ class MattermostService:
                             },
                         },
                         {
-                            "id": f"reject_gate_{gate_number}",
+                            "id": f"rejectGate{gate_number}",
                             "name": "❌ رفض",
                             "style": "danger",
                             "integration": {
@@ -303,7 +303,7 @@ class MattermostService:
                     ),
                     "actions": [
                         {
-                            "id": "approve_tiktok",
+                            "id": "approveTiktok",
                             "name": "✅ Approve & Publish",
                             "integration": {
                                 "url": approve_url,
@@ -315,7 +315,7 @@ class MattermostService:
                             },
                         },
                         {
-                            "id": "reject_tiktok",
+                            "id": "rejectTiktok",
                             "name": "❌ Reject",
                             "style": "danger",
                             "integration": {

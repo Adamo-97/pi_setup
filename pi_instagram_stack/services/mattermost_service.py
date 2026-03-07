@@ -261,7 +261,7 @@ class MattermostService:
                     "color": "#2196F3" if gate_number < 6 else "#4CAF50",
                     "actions": [
                         {
-                            "id": f"approve_gate_{gate_number}",
+                            "id": f"approveGate{gate_number}",
                             "type": "button",
                             "name": "\u2705 \u0645\u0648\u0627\u0641\u0642\u0629",
                             "integration": {
@@ -275,7 +275,7 @@ class MattermostService:
                             },
                         },
                         {
-                            "id": f"reject_gate_{gate_number}",
+                            "id": f"rejectGate{gate_number}",
                             "type": "button",
                             "name": "\u274c \u0631\u0641\u0636",
                             "style": "danger",
@@ -290,7 +290,7 @@ class MattermostService:
                             },
                         },
                         {
-                            "id": f"comment_gate_{gate_number}",
+                            "id": f"commentGate{gate_number}",
                             "type": "button",
                             "name": "\U0001f4ac \u062a\u0639\u0644\u064a\u0642",
                             "integration": {
@@ -446,7 +446,7 @@ class MattermostService:
                     ),
                     "actions": [
                         {
-                            "id": "approve_instagram",
+                            "id": "approveInstagram",
                             "type": "button",
                             "name": "\u2705 Approve & Publish",
                             "integration": {
@@ -459,7 +459,7 @@ class MattermostService:
                             },
                         },
                         {
-                            "id": "reject_instagram",
+                            "id": "rejectInstagram",
                             "type": "button",
                             "name": "\u274c Reject",
                             "style": "danger",

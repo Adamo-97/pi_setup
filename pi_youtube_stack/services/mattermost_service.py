@@ -230,7 +230,7 @@ class MattermostService:
                     ),
                     "actions": [
                         {
-                            "id": "approve_script",
+                            "id": "approveScript",
                             "name": "✅ موافقة",
                             "integration": {
                                 "url": approve_url,
@@ -242,7 +242,7 @@ class MattermostService:
                             },
                         },
                         {
-                            "id": "reject_script",
+                            "id": "rejectScript",
                             "name": "❌ رفض",
                             "style": "danger",
                             "integration": {
@@ -329,7 +329,7 @@ class MattermostService:
                     "color": "#2196F3",
                     "actions": [
                         {
-                            "id": "approve_audio",
+                            "id": "approveAudio",
                             "name": "✅ موافقة على الصوت",
                             "integration": {
                                 "url": approve_url,
@@ -341,7 +341,7 @@ class MattermostService:
                             },
                         },
                         {
-                            "id": "reject_audio",
+                            "id": "rejectAudio",
                             "name": "❌ رفض — إعادة توليد",
                             "style": "danger",
                             "integration": {
@@ -450,7 +450,7 @@ class MattermostService:
                     "color": "#2196F3" if gate_number < 5 else "#4CAF50",
                     "actions": [
                         {
-                            "id": f"approve_gate_{gate_number}",
+                            "id": f"approveGate{gate_number}",
                             "name": "✅ موافقة",
                             "integration": {
                                 "url": approve_url,
@@ -463,7 +463,7 @@ class MattermostService:
                             },
                         },
                         {
-                            "id": f"reject_gate_{gate_number}",
+                            "id": f"rejectGate{gate_number}",
                             "name": "❌ رفض",
                             "style": "danger",
                             "integration": {
