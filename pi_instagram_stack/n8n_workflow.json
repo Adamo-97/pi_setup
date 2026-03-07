@@ -395,7 +395,7 @@
     },
     {
       "parameters": {
-        "command": "={{ (() => {  const scriptText = ($json.script_text || '').substring(0, 3000);  const data = {    score: String($json.overall_score || 0) + '/100',    hook_score: String(($json.scores || {}).hook_strength || $json.hook_score || 0) + '/100',    approved: $json.approved ? 'Yes' : 'No',    revisions: String($json.revision_count || 0),    script: scriptText  };  const cmd = 'cd /home/node/instagram_stack && echo '    + JSON.stringify(JSON.stringify(data))    + ' > /tmp/gate_data.json && python -m pipeline.gate_helper --gate 2 --data-file /tmp/gate_data.json --run-id '    + $json.run_id;  return cmd;})() }}"
+        "command": "={{ (() => {  const scriptText = ($('Parse Script').first().json.script_text || '').substring(0, 3000);  const data = {    score: String($json.overall_score || 0) + '/100',    hook_score: String(($json.scores || {}).hook_strength || $json.hook_score || 0) + '/100',    approved: $json.approved ? 'Yes' : 'No',    revisions: String($json.revision_count || 0),    script: scriptText  };  const cmd = 'cd /home/node/instagram_stack && echo '    + JSON.stringify(JSON.stringify(data))    + ' > /tmp/gate_data.json && python -m pipeline.gate_helper --gate 2 --data-file /tmp/gate_data.json --run-id '    + $json.run_id;  return cmd;})() }}"
       },
       "id": "fd5cf8b7-2bf8-4c6e-a1be-32b7a97acfd2",
       "name": "Gate 2: Script Approval",
