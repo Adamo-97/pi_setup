@@ -135,4 +135,14 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Generate voiceover")
     parser.add_argument("--script-id", required=True, help="Approved script UUID")
     args = parser.parse_args()
-    main(script_id=args.script_id)
+    try:
+        main(script_id=args.script_id)
+    except Exception as e:
+        logger.error("Voiceover generation failed: %s", e)
+        error_output = {
+            "error": str(e),
+            "status": "failed",
+            "script_id": args.script_id,
+        }
+        print(json.dumps(error_output, ensure_ascii=False))
+        sys.exit(1)
