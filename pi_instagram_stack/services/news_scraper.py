@@ -28,6 +28,72 @@ class NewsScraper:
 
     def __init__(self):
         self._cfg = settings.news
+        self._rawg_key = getattr(settings, "rawg", None) and settings.rawg.api_key or ""
+
+    # ================================================================
+    # RAWG.io — Game Database
+    # ================================================================
+
+    def scrape_rawg(self, topic: str = "", max_results: int = 10) -> List[Dict[str, Any]]:
+        """Fetch recent/relevant games from RAWG.io matching the topic."""
+        if not self._rawg_key:
+            logger.info("RAWG API key not set — skipping RAWG.")
+            return []
+
+        articles = []
+        params: Dict[str, Any] = {
+            "key": self._rawg_key,
+            "page_size": max_results,
+            "ordering": "-added",
+        }
+        if topic:
+            params["search"] = topic
+
+        try:
+            resp = requests.get(
+                "https://api.rawg.io/api/games",
+                params=params,
+                timeout=20,
+            )
+            resp.raise_for_status()
+            data = resp.json()
+
+            for game in data.get("results", [])[:max_results]:
+                genres = ", ".join(g["name"] for g in game.get("genres", []))
+                platforms = ", ".join(
+                    p["platform"]["name"]
+                    for p in game.get("platforms", [])
+                    if p.get("platform", {}).get("name")
+                )
+                summary = (
+                    f"Rating: {game.get('rating', 'N/A')}/5 | "
+                    f"Genres: {genres or 'N/A'} | "
+                    f"Platforms: {platforms or 'N/A'}"
+                )
+                articles.append(
+                    {
+                        "source": "rawg",
+                        "source_url": f"https://rawg.io/games/{game.get('slug', '')}",
+                        "title": game.get("name", ""),
+                        "summary": summary,
+                        "category": "gaming",
+                        "published_at": self._parse_date(game.get("released", "")),
+                        "metadata": {
+                            "rawg_id": game.get("id"),
+                            "rating": game.get("rating"),
+                            "ratings_count": game.get("ratings_count"),
+                            "genres": genres,
+                            "platforms": platforms,
+                            "background_image": game.get("background_image", ""),
+                        },
+                    }
+                )
+
+            logger.info("RAWG: %d games for '%s'", len(articles), topic or "trending")
+        except Exception as exc:
+            logger.warning("RAWG scrape failed: %s", exc)
+
+        return articles
 
     # ================================================================
     # RSS Feeds
@@ -237,20 +303,22 @@ class NewsScraper:
         rss_articles = self.scrape_rss()
         google_articles = self.scrape_google_news(query=google_query)
         reddit_articles = self.scrape_reddit()
+        rawg_articles = self.scrape_rawg(topic=topic)
 
         if topic:
             keywords = [kw.strip().lower() for kw in topic.split() if len(kw.strip()) > 2]
             rss_articles = self._filter_by_topic(rss_articles, keywords)
             reddit_articles = self._filter_by_topic(reddit_articles, keywords)
 
-        all_articles = rss_articles + google_articles + reddit_articles
+        all_articles = rawg_articles + google_articles + rss_articles + reddit_articles
         deduplicated = self._deduplicate(all_articles)
 
         logger.info(
-            "Total scraped: %d (RSS=%d, Google=%d, Reddit=%d) → %d after dedup",
+            "Total scraped: %d (RAWG=%d, Google=%d, RSS=%d, Reddit=%d) → %d after dedup",
             len(all_articles),
-            len(rss_articles),
+            len(rawg_articles),
             len(google_articles),
+            len(rss_articles),
             len(reddit_articles),
             len(deduplicated),
         )

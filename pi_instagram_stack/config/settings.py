@@ -72,8 +72,7 @@ class MattermostConfig:
             1: self.channel_news,
             2: self.channel_script,
             3: self.channel_voiceover,
-            4: self.channel_video,      # footage → video assembly channel
-            5: self.channel_publish,
+            4: self.channel_publish,
         }
         return gate_map.get(gate, self.channel_id) or self.channel_id
 
@@ -109,6 +108,13 @@ class SharedRAWGConfig:
     database: str = "youtube_rag"
     user: str = "yt_readonly"
     password: str = "readonly_pass_2025"
+
+
+@dataclass(frozen=True)
+class RAWGConfig:
+    api_key: str = ""
+    base_url: str = "https://api.rawg.io/api"
+    page_size: int = 10
 
 
 @dataclass(frozen=True)
@@ -283,6 +289,9 @@ class _Settings:
         )
         self.news = NewsConfig(
             serpapi_key=e("SERPAPI_KEY", ""),
+        )
+        self.rawg = RAWGConfig(
+            api_key=e("RAWG_API_KEY", ""),
         )
         self.video = VideoConfig()
         self.paths = PathsConfig()

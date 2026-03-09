@@ -56,6 +56,8 @@ def main(source: str = "all", topic: str = "") -> dict:
             articles = scraper.scrape_google_news(query=f"{topic} gaming" if topic else "gaming hardware news")
         elif source == "reddit":
             articles = scraper.scrape_reddit()
+        elif source == "rawg":
+            articles = scraper.scrape_rawg(topic=topic)
         else:
             articles = scraper.scrape_all(topic=topic)
 
@@ -134,7 +136,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Scrape gaming & hardware news")
     parser.add_argument(
         "--source",
-        choices=["all", "rss", "google", "reddit"],
+        choices=["all", "rss", "google", "reddit", "rawg"],
         default="all",
         help="News source to scrape",
     )
