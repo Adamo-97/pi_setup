@@ -128,7 +128,7 @@
         },
         {
             "parameters": {
-                "jsCode": "// Mattermost sends POST with {context: {action, gate, run_id, ...}, post_id, user_name}\n// Also support direct POST body and query params\nconst input = $input.first().json;\nconst ctx = input.context || input.body?.context || input.body || input.query || input;\nreturn [{ json: {\n  gate: parseInt(ctx.gate ?? '0'),\n  run_id: ctx.run_id || '',\n  action: ctx.action || 'approve',\n  post_id: input.post_id || input.body?.post_id || '',\n  user_name: input.user_name || input.body?.user_name || ''\n}}];"
+                "jsCode": "// Mattermost sends POST with {context: {action, gate, run_id, ...}, post_id, user_name}\n// Also support query params for GET fallback\nconst input = $input.first().json;\nconst ctx = input.context || input.body?.context || input.query || input;\nreturn [{ json: {\n  gate: parseInt(ctx.gate ?? '0'),\n  run_id: ctx.run_id || '',\n  action: ctx.action || 'approve',\n  post_id: input.post_id || input.body?.post_id || '',\n  user_name: input.user_name || input.body?.user_name || ''\n}}];"
             },
             "id": "fadba323-7036-4c1e-b756-c74b3820db62",
             "name": "Parse Gate Approval",
@@ -591,7 +591,7 @@
         },
         {
             "parameters": {
-                "jsCode": "// Mattermost sends POST with {context: {action, gate, run_id, ...}, post_id, user_name}\nconst input = $input.first().json;\nconst ctx = input.context || input.body?.context || input.body || input.query || input;\nconst gate = parseInt(ctx.gate || '0');\nconst names = {0:'Plan',1:'News',2:'Script',3:'Voiceover',4:'Footage',5:'Video',6:'Publish'};\nreturn [{json: {success: false, message: '❌ Rejected at Gate ' + gate + ' (' + names[gate] + ').', gate, run_id: ctx.run_id || '', post_id: input.post_id || input.body?.post_id || '', user_name: input.user_name || input.body?.user_name || ''}}];"
+                "jsCode": "// Mattermost sends POST with {context: {action, gate, run_id, ...}, post_id, user_name}\nconst input = $input.first().json;\nconst ctx = input.context || input.body?.context || input.query || input;\nconst gate = parseInt(ctx.gate || '0');\nconst names = {0:'Plan',1:'News',2:'Script',3:'Voiceover',4:'Footage',5:'Video',6:'Publish'};\nreturn [{json: {success: false, message: '❌ Rejected at Gate ' + gate + ' (' + names[gate] + ').', gate, run_id: ctx.run_id || '', post_id: input.post_id || input.body?.post_id || '', user_name: input.user_name || input.body?.user_name || ''}}];"
             },
             "id": "51a745bd-6298-4902-be6e-1a0fbe8580c0",
             "name": "Handle Rejection",
@@ -1223,7 +1223,7 @@
             },
             {
                 "parameters": {
-                    "jsCode": "// Mattermost sends POST with {context: {action, gate, run_id, ...}, post_id, user_name}\n// Also support direct POST body and query params\nconst input = $input.first().json;\nconst ctx = input.context || input.body?.context || input.body || input.query || input;\nreturn [{ json: {\n  gate: parseInt(ctx.gate ?? '0'),\n  run_id: ctx.run_id || '',\n  action: ctx.action || 'approve',\n  post_id: input.post_id || input.body?.post_id || '',\n  user_name: input.user_name || input.body?.user_name || ''\n}}];"
+                    "jsCode": "// Mattermost sends POST with {context: {action, gate, run_id, ...}, post_id, user_name}\n// Also support query params for GET fallback\nconst input = $input.first().json;\nconst ctx = input.context || input.body?.context || input.query || input;\nreturn [{ json: {\n  gate: parseInt(ctx.gate ?? '0'),\n  run_id: ctx.run_id || '',\n  action: ctx.action || 'approve',\n  post_id: input.post_id || input.body?.post_id || '',\n  user_name: input.user_name || input.body?.user_name || ''\n}}];"
                 },
                 "id": "fadba323-7036-4c1e-b756-c74b3820db62",
                 "name": "Parse Gate Approval",
@@ -1686,7 +1686,7 @@
             },
             {
                 "parameters": {
-                    "jsCode": "// Mattermost sends POST with {context: {action, gate, run_id, ...}, post_id, user_name}\nconst input = $input.first().json;\nconst ctx = input.context || input.body?.context || input.body || input.query || input;\nconst gate = parseInt(ctx.gate || '0');\nconst names = {0:'Plan',1:'News',2:'Script',3:'Voiceover',4:'Footage',5:'Video',6:'Publish'};\nreturn [{json: {success: false, message: '❌ Rejected at Gate ' + gate + ' (' + names[gate] + ').', gate, run_id: ctx.run_id || '', post_id: input.post_id || input.body?.post_id || '', user_name: input.user_name || input.body?.user_name || ''}}];"
+                    "jsCode": "// Mattermost sends POST with {context: {action, gate, run_id, ...}, post_id, user_name}\nconst input = $input.first().json;\nconst ctx = input.context || input.body?.context || input.query || input;\nconst gate = parseInt(ctx.gate || '0');\nconst names = {0:'Plan',1:'News',2:'Script',3:'Voiceover',4:'Footage',5:'Video',6:'Publish'};\nreturn [{json: {success: false, message: '❌ Rejected at Gate ' + gate + ' (' + names[gate] + ').', gate, run_id: ctx.run_id || '', post_id: input.post_id || input.body?.post_id || '', user_name: input.user_name || input.body?.user_name || ''}}];"
                 },
                 "id": "51a745bd-6298-4902-be6e-1a0fbe8580c0",
                 "name": "Handle Rejection",
@@ -1728,7 +1728,7 @@
             },
             {
                 "parameters": {
-                    "jsCode": "// Parse comment from Mattermost interactive button or outgoing webhook\nconst input = $input.first().json;\nconst ctx = input.context || input.body?.context || input.body || input.query || input;\n// From Mattermost outgoing webhook: text field contains the actual comment\nconst text = input.text || input.body?.text || ctx.comment || '';\nreturn [{ json: {\n  gate: parseInt(ctx.gate ?? '0'),\n  run_id: ctx.run_id || '',\n  comment: text,\n  action: 'comment'\n}}];"
+                    "jsCode": "// Parse comment from Mattermost interactive button or outgoing webhook\nconst input = $input.first().json;\nconst ctx = input.context || input.body?.context || input.query || input;\n// From Mattermost outgoing webhook: text field contains the actual comment\nconst text = input.text || input.body?.text || ctx.comment || '';\nreturn [{ json: {\n  gate: parseInt(ctx.gate ?? '0'),\n  run_id: ctx.run_id || '',\n  comment: text,\n  action: 'comment'\n}}];"
                 },
                 "id": "e5f6a7b8-c9d0-41e2-f3a4-b5c6d7e8f9a0",
                 "name": "Parse Comment",
