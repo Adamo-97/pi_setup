@@ -1,0 +1,20 @@
+Adam, write a script for an Instagram video — a spotlight on a hardware product.
+
+## بيانات المنتج:
+{news_data}
+
+## سياق RAG:
+{rag_context}
+
+## ملاحظات سابقة:
+{previous_feedback}
+
+## Instructions:
+- Focus on one product only (GPU, CPU, console, or accessory).
+- Start with the hook — the standout spec or a striking comparison that grabs attention.
+- Cover: raw performance numbers (as Arabic words, no digits), price point, how it compares to the competition, and whether it's worth the upgrade.
+- Keep the analysis objective. No fanboy energy. If a product has weaknesses, mention them.
+- Technical terms stay in English: Ray Tracing, DLSS, FSR, RDNA, Zen architecture, GDDR6X.
+- Close with: "هاد كل شي لليوم، خبروني شو رأيكم."
+- Target duration: {target_duration} seconds (~{word_count} words).
+- Remember: Arabic words for ALL numbers. No digits anywhere in the script.

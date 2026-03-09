@@ -86,12 +86,16 @@ class Planner(BaseProcessor):
         # 4. Get covered topics
         covered_topics = self._get_covered_topics()
 
+        # 4b. Get recent scraped news
+        news_data = self._get_recent_news()
+
         # 5. Generate plan
         prompt = get_planner_prompt(
             trending_games=trending_games,
             covered_topics=covered_topics,
             remaining_budget=remaining,
             current_date=date.today().isoformat(),
+            news_data=news_data,
         )
 
         response = self.gemini.generate_text(
@@ -198,3 +202,32 @@ class Planner(BaseProcessor):
         except Exception as exc:
             logger.warning("Covered topics query failed: %s", exc)
             return "خطأ في استرجاع المواضيع."
+
+    def _get_recent_news(self) -> str:
+        """Get recent unused news articles from local DB (scraped by Step 1)."""
+        try:
+            from database.connection import execute_query
+
+            articles = execute_query(
+                """SELECT source, title, summary
+                   FROM news_articles
+                   WHERE used = FALSE
+                     AND scraped_at >= NOW() - INTERVAL '48 hours'
+                   ORDER BY published_at DESC NULLS LAST
+                   LIMIT 10""",
+                fetch=True,
+            )
+            if not articles:
+                return "لا توجد أخبار حديثة."
+
+            parts = []
+            for i, a in enumerate(articles, 1):
+                summary = (a.get("summary") or "")[:200]
+                parts.append(
+                    f"{i}. [{a['source']}] {a['title']}\n"
+                    f"   {summary}"
+                )
+            return "\n\n".join(parts)
+        except Exception as exc:
+            logger.warning("Recent news query failed: %s", exc)
+            return "خطأ في استرجاع الأخبار."
