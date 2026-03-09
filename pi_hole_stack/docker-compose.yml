@@ -20,27 +20,35 @@ services:
       - "${PIHOLE_WEB_PORT:-8080}:80/tcp"
     environment:
       TZ: ${TZ:-Europe/Stockholm}
-      WEBPASSWORD: ${PIHOLE_PASSWORD:-changeme}
-      FTLCONF_LOCAL_IPV4: ${HOST_IP:-192.168.0.11}
-      PIHOLE_DNS_: "1.1.1.1;1.0.0.1"
-      DNSSEC: "true"
-      DNSMASQ_LISTENING: local
-      PIHOLE_LOGGING: "true"
-      QUERY_LOGGING: "true"
+      FTLCONF_webserver_api_password: ${PIHOLE_PASSWORD:-changeme}
+      FTLCONF_dns_upstreams: "1.1.1.1;1.0.0.1"
+      FTLCONF_dns_dnssec: "true"
+      # "ALL" allows queries from any origin (LAN devices via Docker bridge).
+      # "LOCAL" silently rejects LAN queries and floods logs with warnings.
+      FTLCONF_dns_listeningMode: "ALL"
+      FTLCONF_dns_queryLogging: "false"
     volumes:
       - pihole_config:/etc/pihole
       - pihole_dnsmasq:/etc/dnsmasq.d
       - ./pihole/custom.list:/etc/pihole/custom.list:ro
     cap_add:
       - NET_ADMIN
+    # Prevent pihole from consuming all system memory and freezing the Pi
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: "1.0"
     healthcheck:
       # Query pi.hole (resolved locally by pihole itself — no upstream needed,
       # avoids DNSSEC timeout on external domains)
       test: ["CMD", "dig", "+short", "+time=5", "pi.hole", "@127.0.0.1"]
-      interval: 30s
+      interval: 60s
       timeout: 10s
-      retries: 3
-      start_period: 60s
+      retries: 5
+      start_period: 90s
+    labels:
+      - "autoheal=true"
 
   # Watches for unhealthy containers and restarts them.
   # Docker's restart policy only fires on container exit, not on health failures.
@@ -49,9 +57,10 @@ services:
     container_name: autoheal
     restart: unless-stopped
     environment:
-      AUTOHEAL_CONTAINER_LABEL: all
-      AUTOHEAL_INTERVAL: 30
-      AUTOHEAL_START_PERIOD: 60
+      # Only restart containers with the autoheal=true label
+      AUTOHEAL_CONTAINER_LABEL: autoheal
+      AUTOHEAL_INTERVAL: 60
+      AUTOHEAL_START_PERIOD: 120
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
 
