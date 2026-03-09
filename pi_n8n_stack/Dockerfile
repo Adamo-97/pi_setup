@@ -16,6 +16,13 @@ RUN mkdir -p /python-libs && \
       cp -L "$lib" /python-libs/ 2>/dev/null || true; \
     done
 
+# Create yt-dlp CLI wrapper (pip entry point scripts aren't preserved in multi-stage copy)
+RUN printf '#!/usr/local/bin/python3.11\nimport sys; from yt_dlp import main; main()\n' \
+    > /usr/local/bin/yt-dlp && chmod +x /usr/local/bin/yt-dlp
+
+# Stage 1b: grab statically-linked ffmpeg + ffprobe (no shared-lib headaches)
+FROM mwader/static-ffmpeg:7.1.1 AS ffmpeg-builder
+
 # Stage 2: final n8n image with Python injected
 FROM n8nio/n8n:latest
 
@@ -23,11 +30,16 @@ USER root
 
 # Copy Python interpreter, stdlib, and all pip-installed packages
 COPY --from=python-builder /usr/local/bin/python3*  /usr/local/bin/
+COPY --from=python-builder /usr/local/bin/yt-dlp     /usr/local/bin/yt-dlp
 COPY --from=python-builder /usr/local/lib/python3.11 /usr/local/lib/python3.11
 COPY --from=python-builder /usr/local/lib/libpython3* /usr/local/lib/
 
 # Copy shared libraries that Python links against
 COPY --from=python-builder /python-libs/ /usr/lib/
+
+# Copy ffmpeg + ffprobe (statically linked — no shared libs needed)
+COPY --from=ffmpeg-builder /ffmpeg /usr/local/bin/ffmpeg
+COPY --from=ffmpeg-builder /ffprobe /usr/local/bin/ffprobe
 
 # Symlink for bare 'python' calls and update library cache
 RUN ln -sf /usr/local/bin/python3.11 /usr/local/bin/python && \
