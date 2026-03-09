@@ -37,7 +37,7 @@ class ElevenLabsConfig:
     api_key: str = ""
     voice_id: str = ""
     model: str = "eleven_multilingual_v2"
-    output_format: str = "pcm_44100"
+    output_format: str = "mp3_44100_128"
     sample_rate: int = 44100
 
 
@@ -252,6 +252,8 @@ class _Settings:
             api_key=e("ELEVENLABS_API_KEY", ""),
             voice_id=e("ELEVENLABS_VOICE_ID", ""),
             model=e("ELEVENLABS_MODEL", "eleven_multilingual_v2"),
+            output_format=e("ELEVENLABS_OUTPUT_FORMAT", "mp3_44100_128"),
+            sample_rate=int(e("ELEVENLABS_SAMPLE_RATE", "44100")),
         )
         self.database = DatabaseConfig(
             host=e("DB_HOST", "localhost"),

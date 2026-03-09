@@ -71,7 +71,7 @@ def main(script_id: str) -> dict:
     output_dir.mkdir(parents=True, exist_ok=True)
 
     vo_id = str(uuid.uuid4())
-    output_path = str(output_dir / f"{vo_id[:8]}.wav")
+    output_path = str(output_dir / f"{vo_id[:8]}.mp3")
 
     result = tts.generate_voiceover(
         text=tts_text,

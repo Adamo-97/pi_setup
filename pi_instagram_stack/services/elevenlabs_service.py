@@ -6,6 +6,7 @@ Arabic voiceover generation with word-level timestamps for subtitle sync.
 """
 
 import logging
+import subprocess
 import time
 import wave
 from pathlib import Path
@@ -107,9 +108,14 @@ class ElevenLabsService:
             return None
 
         audio_bytes = base64.b64decode(audio_b64)
-        self._pcm_to_wav(audio_bytes, output_path)
 
-        duration = self._get_wav_duration(output_path)
+        if self._output_format.startswith("pcm_"):
+            self._pcm_to_wav(audio_bytes, output_path)
+            duration = self._get_wav_duration(output_path)
+        else:
+            with open(output_path, "wb") as f:
+                f.write(audio_bytes)
+            duration = self._get_audio_duration(output_path)
 
         # Extract character-level alignment → word-level
         alignment = data.get("alignment", {})
@@ -153,12 +159,17 @@ class ElevenLabsService:
         )
         resp.raise_for_status()
 
-        pcm_data = b""
+        raw_data = b""
         for chunk in resp.iter_content(chunk_size=8192):
-            pcm_data += chunk
+            raw_data += chunk
 
-        self._pcm_to_wav(pcm_data, output_path)
-        duration = self._get_wav_duration(output_path)
+        if self._output_format.startswith("pcm_"):
+            self._pcm_to_wav(raw_data, output_path)
+            duration = self._get_wav_duration(output_path)
+        else:
+            with open(output_path, "wb") as f:
+                f.write(raw_data)
+            duration = self._get_audio_duration(output_path)
         word_timestamps = self._estimate_timestamps(text, duration)
 
         return {
@@ -243,6 +254,23 @@ class ElevenLabsService:
     def _get_wav_duration(path: str) -> float:
         with wave.open(path, "rb") as wf:
             return wf.getnframes() / wf.getframerate()
+
+    @staticmethod
+    def _get_audio_duration(path: str) -> float:
+        """Get duration of any audio file via ffprobe."""
+        try:
+            result = subprocess.run(
+                [
+                    "ffprobe", "-v", "error",
+                    "-show_entries", "format=duration",
+                    "-of", "default=noprint_wrappers=1:nokey=1",
+                    path,
+                ],
+                capture_output=True, text=True, timeout=10,
+            )
+            return float(result.stdout.strip())
+        except Exception:
+            return 0.0
 
     def get_usage(self) -> Dict[str, Any]:
         resp = requests.get(
