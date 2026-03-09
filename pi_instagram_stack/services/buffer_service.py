@@ -122,6 +122,58 @@ class BufferService:
             }
 
     # ================================================================
+    # Create draft (text-only, no video)
+    # ================================================================
+
+    def create_draft(
+        self,
+        caption: str,
+        hashtags: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """
+        Create a text-only draft in Buffer for manual video attachment.
+
+        Args:
+            caption: Arabic caption text.
+            hashtags: Space-separated hashtag string.
+
+        Returns:
+            dict with success, update_id, message
+        """
+        full_text = caption
+        if hashtags:
+            full_text = f"{caption}\n\n{hashtags}"
+
+        url = f"{self.API_BASE}/updates/create.json"
+        data = {
+            "profile_ids[]": self.profile_id,
+            "text": full_text,
+            "now": "false",
+        }
+
+        try:
+            resp = self.session.post(url, data=data, timeout=30)
+            resp_data = resp.json()
+
+            if resp.status_code == 200 and resp_data.get("success"):
+                updates = resp_data.get("updates", [])
+                update_id = updates[0].get("id", "") if updates else ""
+                logger.info("Buffer draft created: %s", update_id)
+                return {
+                    "success": True,
+                    "update_id": update_id,
+                    "message": "Draft queued in Buffer for video attachment",
+                }
+            else:
+                error_msg = resp_data.get("message", resp.text[:500])
+                logger.error("Buffer draft failed: %s", error_msg)
+                return {"success": False, "update_id": None, "message": error_msg}
+
+        except Exception as e:
+            logger.error("Buffer draft error: %s", e)
+            return {"success": False, "update_id": None, "message": str(e)}
+
+    # ================================================================
     # Check update status
     # ================================================================
 

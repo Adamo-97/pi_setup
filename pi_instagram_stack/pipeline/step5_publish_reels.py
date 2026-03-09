@@ -1,0 +1,117 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+Step 5: Publish Draft to Buffer
+================================
+Generates SEO-optimised caption, hashtags, and title via Gemini,
+then pushes a text-only draft to Buffer. The user attaches their
+manually-edited video in Buffers dashboard before publishing.
+
+Usage:
+    python -m pipeline.step5_publish_reels --script-id <UUID>
+"""
+
+import argparse
+import json
+import logging
+import re
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+from config.settings import get_settings
+from database.connection import execute_query
+from processors.seo import SEO
+from services.buffer_service import BufferService
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(name)s] %(levelname)s: %(message)s",
+)
+logger = logging.getLogger("pipeline.publish")
+
+
+def main(script_id: str) -> dict:
+    """
+    Generate SEO metadata and push a draft to Buffer.
+
+    Args:
+        script_id: UUID of the generated script
+
+    Returns:
+        dict with SEO results and Buffer draft status
+    """
+    logger.info("=== Step 5: Publish Draft (%s) ===", script_id[:8])
+
+    settings = get_settings()
+
+    # Fetch script and voiceover info
+    rows = execute_query(
+        """
+        SELECT gs.id, gs.script_text, gs.content_type,
+               vo.duration
+        FROM generated_scripts gs
+        LEFT JOIN voiceovers vo ON vo.script_id = gs.id
+        WHERE gs.id = %s
+        ORDER BY vo.created_at DESC
+        LIMIT 1
+        """,
+        (script_id,),
+        fetch=True,
+    )
+    if not rows:
+        raise ValueError(f"Script not found: {script_id}")
+
+    row = rows[0]
+    script_text = row["script_text"]
+    content_type = row["content_type"]
+    duration = row["duration"] or 45
+
+    # Generate SEO-optimised caption and hashtags via Gemini
+    try:
+        seo = SEO()
+        seo_result = seo.run(
+            script_text=script_text,
+            content_type=content_type,
+            topics=content_type.replace("_", " "),
+            duration_seconds=int(duration),
+            script_id=script_id,
+        )
+        caption = seo_result["full_caption"]
+        hashtags = seo_result["hashtags_first_comment"]
+        logger.info("SEO agent produced caption (%d chars)", len(caption))
+    except Exception as exc:
+        logger.warning("SEO agent failed (%s) — falling back to truncated caption", exc)
+        clean_text = re.sub(r"\[.*?\]", "", script_text)
+        caption = clean_text[:150].strip() + ("..." if len(clean_text) > 150 else "")
+        hashtags = BufferService.get_default_hashtags(content_type)
+        seo_result = {}
+
+    # Push text-only draft to Buffer (user attaches video manually)
+    buffer = BufferService(
+        access_token=settings.buffer.access_token,
+        profile_id=settings.buffer.profile_id,
+    )
+    draft_result = buffer.create_draft(caption=caption, hashtags=hashtags)
+
+    result = {
+        "script_id": script_id,
+        "success": draft_result["success"],
+        "buffer_update_id": draft_result.get("update_id"),
+        "caption": caption,
+        "hashtags": hashtags,
+        "seo_id": seo_result.get("seo_id"),
+        "message": draft_result.get("message", ""),
+    }
+
+    logger.info("Buffer draft: %s", "\u2705" if draft_result["success"] else "\u274c")
+    print(json.dumps(result, ensure_ascii=False))
+    return result
+
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Publish draft to Buffer")
+    parser.add_argument("--script-id", required=True, help="Script UUID")
+    args = parser.parse_args()
+    main(script_id=args.script_id)
