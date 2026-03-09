@@ -25,8 +25,8 @@ logger = logging.getLogger("instagram.validator")
 class Validator(BaseProcessor):
     """AI quality gate for Instagram Reels scripts."""
 
-    # Auto-reject threshold — 90+ required for approval
-    MIN_OVERALL_SCORE = 90
+    # Auto-reject threshold — 95+ required for approval
+    MIN_OVERALL_SCORE = 95
     MIN_HOOK_SCORE = 70
     MAX_REVISIONS = 10
 
@@ -124,6 +124,16 @@ class Validator(BaseProcessor):
             (new_status, script_id),
         )
 
+        # Store rejected patterns in RAG so the writer doesn't repeat mistakes
+        if not approved and validation.get("critical_issues"):
+            self._store_rejected_patterns(
+                script_id=script_id,
+                script_text=script_text,
+                content_type=content_type,
+                critical_issues=validation["critical_issues"],
+                overall_score=overall,
+            )
+
         result = {
             "validation_id": validation_id,
             "approved": approved,
@@ -209,6 +219,39 @@ class Validator(BaseProcessor):
     # ================================================================
     # Helpers
     # ================================================================
+
+    def _store_rejected_patterns(
+        self,
+        script_id: str,
+        script_text: str,
+        content_type: str,
+        critical_issues: list,
+        overall_score: float,
+    ) -> None:
+        """Store rejected script patterns in RAG so the writer avoids them."""
+        try:
+            from database.rag_manager import RAGManager
+            from services.embedding_service import embed_text
+
+            rag = RAGManager()
+            issues_text = "; ".join(critical_issues)
+            feedback = (
+                f"REJECTED PATTERN ({content_type}, score {overall_score:.0f}/100): "
+                f"{issues_text}. "
+                f"Script snippet: {script_text[:300]}"
+            )
+            embedding = embed_text(feedback[:500])
+            rag.store_feedback(
+                script_id=script_id,
+                video_id="",
+                feedback_text=feedback,
+                feedback_type="negative",
+                embedding=embedding,
+                source="validator",
+            )
+            logger.info("Stored rejected pattern in RAG for script %s", script_id[:8])
+        except Exception as e:
+            logger.warning("Failed to store rejected pattern in RAG: %s", e)
 
     @staticmethod
     def _store_validation(

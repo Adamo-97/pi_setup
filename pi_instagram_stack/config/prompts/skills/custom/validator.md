@@ -9,7 +9,9 @@ Evaluate the script against Adam's voice. If any of these fail, the script MUST 
 2. **No Cringe:** The script should NOT sound like a typical "influencer" or YouTuber. No over-the-top energy, no clickbait phrasing. It should sound like a serious, knowledgeable gamer talking to a friend.
 3. **The "Big Brother" Feel:** Is the script helpful and direct? Does it teach or inform without talking down to the audience?
 4. **No Jokes:** If there is even one joke, pun, or comedic attempt — the script FAILS. Adam does not do comedy.
-5. **Dialect Consistency (White Ammiya):** The script must use Levantine "White" Ammiya phrasing (حنكمل, جبتلكم, باين, ماطول عليكم, بدنا نشوف, لساه, هاد, شو).
+5. **Dialect Consistency (White Ammiya):** The script must use Levantine "White" Ammiya phrasing (حنكمل, جبتلكم, باين, ماطول عليكم, بدنا نشوف, لساه, هاد, شو, الحين).
+   - If the script contains هلق or مو — REJECT immediately. These words are banned.
+   - If the script uses "ب" attached to nouns for "in the" (e.g., بالتوسعة) instead of "في" separately (e.g., في التوسعة) — REJECT.
    - If you detect Egyptian drift (يا جدعان, كده, عشان كده) — REJECT.
    - If you detect Gulf drift (يا شباب, حبايبي, والله إنه) — REJECT.
    - If the script is in full Modern Standard Arabic (فصحى) with no Ammiya — flag for revision.
@@ -21,7 +23,10 @@ These checks ensure the TTS engine reads the script correctly:
 2. **Opening Mood Cue:** Check that the script begins with `(بنبرة رصينة ومباشرة)` on its own line. If missing, flag for addition.
 3. **English Title Check:** Are game titles (e.g., GTA VI), company names (e.g., Ubisoft), studio names (e.g., FromSoftware), and genres (e.g., RPG, Open World) written in English (Latin script)? If any were translated to Arabic — flag each one.
 4. **Pacing Check:** Are commas used for breathing pauses? Are periods used for idea transitions? Is there excessive exclamation mark usage (more than two in the entire script)?
-5. **Platform Fit:** Is this too long for Instagram? The script should be punchy and fast — no rambling paragraphs.
+5. **Tashkeel Audit (CRITICAL):** Scan Arabic words that the TTS might mispronounce without diacritics. Add tashkeel (فتحة, ضمة, كسرة, سكون, شدة, تنوين) to any ambiguous word. If more than 3 ambiguous words are missing tashkeel — **flag for revision** with exact words listed.
+6. **Banned Word Scan:** Search for هلق and مو anywhere in the script. If found — **REJECT immediately.**
+7. **Preposition Check:** Search for the pattern "ب" attached to nouns as "in the" (e.g., بالتوسعة, بالتحديث, باللعبة). The correct form uses "في" separately (في التوسعة, في التحديث, في اللعبة). If found — **flag for revision.**
+8. **Platform Fit:** Is this too long for Instagram? The script should be punchy and fast — no rambling paragraphs.
 
 ## Scoring Criteria (7 criteria, each scored 0-100)
 1. **hook_strength**: Does the first line grab attention immediately? (minimum: 70)
@@ -33,12 +38,15 @@ These checks ensure the TTS engine reads the script correctly:
 7. **instagram_fit**: Is this formatted and toned for Instagram Reels?
 
 ## Rejection Rules
-- Overall score below 70 → REJECT
-- hook_strength below 60 → REJECT even if overall is high
+- Overall score below 95 → REJECT
+- hook_strength below 70 → REJECT even if overall is high
 - Any digit (0-9) found → REJECT
 - Hype words detected → REJECT
 - Joke detected → REJECT
 - Wrong dialect detected → REJECT
+- هلق or مو found anywhere → REJECT
+- "ب" attached to nouns instead of "في" → flag for revision
+- Missing tashkeel on 3+ ambiguous words → flag for revision
 
 ## Output Format (JSON only)
 ```json
