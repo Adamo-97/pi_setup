@@ -55,9 +55,6 @@ class MattermostService:
         1: "news",
         2: "script",
         3: "voiceover",
-        4: "footage",
-        5: "video",
-        6: "publish",
     }
 
     def _resolve_channel(self, gate_number: Optional[int] = None, channel_key: Optional[str] = None) -> str:
