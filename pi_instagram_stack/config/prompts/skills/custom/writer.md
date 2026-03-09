@@ -33,21 +33,8 @@ These rules ensure the Arabic TTS voice reads the script correctly:
    - Use periods (.) to mark transitions between ideas — the voice will pause longer.
    - Do NOT overuse exclamation marks — one or two max in the entire script. Adam is calm.
 
-3. **Opening Mood Cue:** Start the script with this stage direction on its own line:
-   ```
-   (بنبرة رصينة ومباشرة)
-   ```
-   This sets the ElevenLabs voice to deliver in a composed, direct tone.
-
-4. **Mixed Language Handling:**
+3. **Mixed Language Handling:**
    - English game titles/terms will be read with an English accent by the TTS — this is correct and intended.
-   - For Arabic words that might confuse the TTS, add diacritics (tashkeel) if needed.
-
-5. **Tashkeel (IMPORTANT):** Add diacritics (فتحة, ضمة, كسرة, سكون, شدة, تنوين) to any Arabic word that could be mispronounced by the TTS. Especially:
-   - Words with multiple valid pronunciations
-   - Proper nouns transliterated to Arabic
-   - Technical terms in Arabic
-   - Verbs where the tense is ambiguous without tashkeel
 
 ## Instagram Script Structure
 1. **The Hook (first 3 seconds):** Start immediately with the core news. No "مرحبا" or "أهلا." Jump straight into the story.

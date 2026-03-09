@@ -227,11 +227,21 @@ class NewsScraper:
     # Aggregate + Store
     # ================================================================
 
-    def scrape_all(self) -> List[Dict[str, Any]]:
-        """Scrape all sources and return combined, deduplicated articles."""
+    def scrape_all(self, topic: str = "") -> List[Dict[str, Any]]:
+        """Scrape all sources and return combined, deduplicated articles.
+        
+        If topic is provided, Google News searches for that topic specifically
+        and RSS/Reddit results are filtered to only include relevant articles.
+        """
+        google_query = f"{topic} gaming" if topic else "gaming hardware news"
         rss_articles = self.scrape_rss()
-        google_articles = self.scrape_google_news()
+        google_articles = self.scrape_google_news(query=google_query)
         reddit_articles = self.scrape_reddit()
+
+        if topic:
+            keywords = [kw.strip().lower() for kw in topic.split() if len(kw.strip()) > 2]
+            rss_articles = self._filter_by_topic(rss_articles, keywords)
+            reddit_articles = self._filter_by_topic(reddit_articles, keywords)
 
         all_articles = rss_articles + google_articles + reddit_articles
         deduplicated = self._deduplicate(all_articles)
@@ -318,6 +328,18 @@ class NewsScraper:
             seen_titles.add(title_key)
             result.append(a)
         return result
+
+    @staticmethod
+    def _filter_by_topic(
+        articles: List[Dict[str, Any]], keywords: List[str]
+    ) -> List[Dict[str, Any]]:
+        """Keep only articles whose title or summary contains at least one keyword."""
+        filtered = []
+        for a in articles:
+            text = (a.get("title", "") + " " + a.get("summary", "")).lower()
+            if any(kw in text for kw in keywords):
+                filtered.append(a)
+        return filtered
 
     @staticmethod
     def _clean_html(text: str) -> str:

@@ -30,12 +30,13 @@ logging.basicConfig(
 logger = logging.getLogger("pipeline.scrape_news")
 
 
-def main(source: str = "all") -> dict:
+def main(source: str = "all", topic: str = "") -> dict:
     """
     Scrape news from specified sources.
 
     Args:
         source: 'all', 'rss', 'google', or 'reddit'
+        topic: optional topic to focus the scraping on
 
     Returns:
         dict with counts and status
@@ -43,7 +44,7 @@ def main(source: str = "all") -> dict:
     settings = get_settings()
     scraper = NewsScraper()
 
-    logger.info("=== Step 1: Scrape News (source: %s) ===", source)
+    logger.info("=== Step 1: Scrape News (source: %s, topic: %s) ===", source, topic or "all")
 
     # Record pipeline run
     run_id = _start_pipeline_run("scrape_news")
@@ -52,11 +53,11 @@ def main(source: str = "all") -> dict:
         if source == "rss":
             articles = scraper.scrape_rss()
         elif source == "google":
-            articles = scraper.scrape_google_news()
+            articles = scraper.scrape_google_news(query=f"{topic} gaming" if topic else "gaming hardware news")
         elif source == "reddit":
             articles = scraper.scrape_reddit()
         else:
-            articles = scraper.scrape_all()
+            articles = scraper.scrape_all(topic=topic)
 
         # Store in database
         stored = scraper.store_articles(articles)
@@ -138,6 +139,7 @@ if __name__ == "__main__":
         help="News source to scrape",
     )
     parser.add_argument("--run-id", default=None, help="n8n run ID (ignored, for tracking)")
+    parser.add_argument("--topic", default="", help="Focus scraping on this topic")
     args = parser.parse_args()
-    result = main(source=args.source)
+    result = main(source=args.source, topic=args.topic)
     print(_json.dumps(result, ensure_ascii=False))

@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Step 5: Publish Draft to Buffer
-================================
+Step 5: Generate Publish Package
+=================================
 Generates SEO-optimised caption, hashtags, and title via Gemini,
-then pushes a text-only draft to Buffer. The user attaches their
-manually-edited video in Buffers dashboard before publishing.
+then posts a notification to the Publish Mattermost channel so the
+user can attach their video and thumbnail before approving Gate 4.
 
 Usage:
     python -m pipeline.step5_publish_reels --script-id <UUID>
@@ -34,17 +34,15 @@ logger = logging.getLogger("pipeline.publish")
 
 def main(script_id: str) -> dict:
     """
-    Generate SEO metadata and push a draft to Buffer.
+    Generate SEO metadata (caption + hashtags) for the publish gate.
 
     Args:
         script_id: UUID of the generated script
 
     Returns:
-        dict with SEO results and Buffer draft status
+        dict with SEO results
     """
-    logger.info("=== Step 5: Publish Draft (%s) ===", script_id[:8])
-
-    settings = get_settings()
+    logger.info("=== Step 5: Generate Publish Package (%s) ===", script_id[:8])
 
     # Fetch script and voiceover info
     rows = execute_query(
@@ -88,30 +86,21 @@ def main(script_id: str) -> dict:
         hashtags = BufferService.get_default_hashtags(content_type)
         seo_result = {}
 
-    # Push text-only draft to Buffer (user attaches video manually)
-    buffer = BufferService(
-        access_token=settings.buffer.access_token,
-        profile_id=settings.buffer.profile_id,
-    )
-    draft_result = buffer.create_draft(caption=caption, hashtags=hashtags)
-
     result = {
         "script_id": script_id,
-        "success": draft_result["success"],
-        "buffer_update_id": draft_result.get("update_id"),
+        "success": True,
         "caption": caption,
         "hashtags": hashtags,
         "seo_id": seo_result.get("seo_id"),
-        "message": draft_result.get("message", ""),
     }
 
-    logger.info("Buffer draft: %s", "\u2705" if draft_result["success"] else "\u274c")
+    logger.info("Publish package ready — caption %d chars", len(caption))
     print(json.dumps(result, ensure_ascii=False))
     return result
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Publish draft to Buffer")
+    parser = argparse.ArgumentParser(description="Generate publish package (SEO)")
     parser.add_argument("--script-id", required=True, help="Script UUID")
     args = parser.parse_args()
     main(script_id=args.script_id)

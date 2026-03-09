@@ -226,6 +226,27 @@
               },
               "renameOutput": true,
               "outputKey": "Gate 3"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": ""
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $('Parse Gate Approval').first().json.gate }}",
+                    "rightValue": 4,
+                    "operator": {
+                      "type": "number",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Gate 4"
             }
           ]
         },
@@ -242,7 +263,7 @@
     },
     {
       "parameters": {
-        "command": "={{ 'cd /home/node/instagram_stack && python -m pipeline.step1_scrape_news --source all --run-id ' + $('Parse Gate Approval').first().json.run_id + ' | tee /tmp/step1_out.txt && python3 -m pipeline.save_state ' + $('Parse Gate Approval').first().json.run_id + ' /tmp/step1_out.txt' }}"
+        "command": "={{ 'cd /home/node/instagram_stack && eval $(python3 -m pipeline.read_state ' + $('Parse Gate Approval').first().json.run_id + ') && python -m pipeline.step1_scrape_news --source all --topic \"$PROPOSED_TOPIC\" --run-id ' + $('Parse Gate Approval').first().json.run_id + ' | tee /tmp/step1_out.txt && python3 -m pipeline.save_state ' + $('Parse Gate Approval').first().json.run_id + ' /tmp/step1_out.txt' }}"
       },
       "id": "779232ab-30fa-42b5-b2ce-4f4aa7a79c19",
       "name": "1. Scrape News",
@@ -532,6 +553,45 @@
         224,
         2312
       ]
+    },
+    {
+      "parameters": {
+        "command": "={{ (() => {  const data = {    caption: ($json.caption || '').substring(0, 2000),    hashtags: ($json.hashtags || '').substring(0, 500)  };  const cmd = 'cd /home/node/instagram_stack && echo '    + JSON.stringify(JSON.stringify(data))    + ' > /tmp/gate_data.json && python -m pipeline.gate_helper --gate 4 --data-file /tmp/gate_data.json --run-id '    + $json.run_id;  return cmd;})() }}"
+      },
+      "id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+      "name": "Gate 4: Publish Approval",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [
+        1196,
+        1568
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const stdout = $input.first().json.stdout || '';\nconst lines = stdout.trim().split('\\n');\ntry {\n  const pub = JSON.parse(lines[lines.length - 1]);\n  const result = { ...pub, run_id: $('Parse Gate Approval').first().json.run_id };\n  return [{ json: result }];\n} catch (e) { throw new Error('Parse publish failed: ' + e.message); }"
+      },
+      "id": "b2c3d4e5-f6a7-8901-bcde-f12345678901",
+      "name": "Parse Publish",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        996,
+        1568
+      ]
+    },
+    {
+      "parameters": {
+        "command": "={{ 'cd /home/node/instagram_stack && eval $(python3 -m pipeline.read_state ' + $('Parse Gate Approval').first().json.run_id + ') && python -m pipeline.step5b_buffer_draft --script-id $SCRIPT_ID --caption \"$CAPTION\" --hashtags \"$HASHTAGS\" | tee /tmp/step5b_out.txt && python3 -m pipeline.save_state ' + $('Parse Gate Approval').first().json.run_id + ' /tmp/step5b_out.txt' }}"
+      },
+      "id": "c3d4e5f6-a7b8-9012-cdef-123456789012",
+      "name": "5b. Buffer Draft",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [
+        1396,
+        1568
+      ]
     }
   ],
   "connections": {
@@ -649,6 +709,13 @@
         [
           {
             "node": "5. Publish",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "5b. Buffer Draft",
             "type": "main",
             "index": 0
           }
@@ -798,22 +865,44 @@
         ]
       ]
     },
-    "5. Publish": {
+    "6. Update RAG": {
       "main": [
         [
           {
-            "node": "6. Update RAG",
+            "node": "Pipeline Complete",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "6. Update RAG": {
+    "5. Publish": {
       "main": [
         [
           {
-            "node": "Pipeline Complete",
+            "node": "Parse Publish",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Publish": {
+      "main": [
+        [
+          {
+            "node": "Gate 4: Publish Approval",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "5b. Buffer Draft": {
+      "main": [
+        [
+          {
+            "node": "6. Update RAG",
             "type": "main",
             "index": 0
           }
