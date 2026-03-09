@@ -13,7 +13,7 @@ RUN pip install --no-cache-dir -r /tmp/requirements.txt
 # Collect all shared libraries Python depends on (libffi, libssl, etc.)
 RUN mkdir -p /python-libs && \
     for lib in $(ldd /usr/local/bin/python3.11 2>/dev/null | awk '/=>/{print $3}'); do \
-      cp -L "$lib" /python-libs/ 2>/dev/null || true; \
+    cp -L "$lib" /python-libs/ 2>/dev/null || true; \
     done
 
 # Create yt-dlp CLI wrapper (pip entry point scripts aren't preserved in multi-stage copy)
