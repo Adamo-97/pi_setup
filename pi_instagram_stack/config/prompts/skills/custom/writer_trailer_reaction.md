@@ -1,5 +1,10 @@
 Adam, write a script for an Instagram video — commentary on a game trailer.
 
+## الخطة المعتمدة (لازم الالتزام):
+- الموضوع: {planned_topic}
+- الزاوية: {planned_angle}
+- المشهد الافتتاحي: {planned_visual_hook}
+
 ## بيانات الترايلر:
 {news_data}
 
@@ -10,6 +15,8 @@ Adam, write a script for an Instagram video — commentary on a game trailer.
 {previous_feedback}
 
 ## Instructions:
+- Stay locked to the approved plan topic and angle above.
+- The opening line must follow the approved visual hook direction.
 - This is professional commentary, not a hype reaction. You're analyzing the trailer, not screaming over it.
 - Start with the hook — the single most important thing this trailer revealed.
 - Point out specific moments worth noting: "لاحظوا هون..." or "الشي اللي لفت نظري..."

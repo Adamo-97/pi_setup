@@ -44,7 +44,7 @@
     },
     {
       "parameters": {
-        "jsCode": "function uuidv4(){return \"xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx\".replace(/[xy]/g,c=>{const r=Math.random()*16|0;return(c===\"x\"?r:(r&0x3|0x8)).toString(16);})}const runId=uuidv4();return[{json:{content_type:\"game_highlights\",duration:45,run_id:runId}}];"
+        "jsCode": "function uuidv4(){return \"xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx\".replace(/[xy]/g,c=>{const r=Math.random()*16|0;return(c===\"x\"?r:(r&0x3|0x8)).toString(16);})}const runId=uuidv4();return[{json:{content_type:\"trending_news\",duration:45,run_id:runId}}];"
       },
       "id": "51f40e9f-d510-4348-a905-d99239245805",
       "name": "Set Defaults",
@@ -302,7 +302,7 @@
     },
     {
       "parameters": {
-        "command": "={{ 'cd /home/node/instagram_stack && python -m pipeline.step2_generate_script --type trending_news --duration 45 --run-id ' + $('Parse Gate Approval').first().json.run_id + ' | tee /tmp/step2_out.txt && python3 -m pipeline.save_state ' + $('Parse Gate Approval').first().json.run_id + ' /tmp/step2_out.txt' }}"
+        "command": "={{ 'cd /home/node/instagram_stack && eval $(python3 -m pipeline.read_state ' + $('Parse Gate Approval').first().json.run_id + ') && python -m pipeline.step2_generate_script --type \"$PROPOSED_CONTENT_TYPE\" --duration \"$ESTIMATED_DURATION_SECONDS\" --topic \"$PROPOSED_TOPIC\" --angle \"$PROPOSED_ANGLE\" --visual-hook \"$VISUAL_HOOK\" --run-id ' + $('Parse Gate Approval').first().json.run_id + ' | tee /tmp/step2_out.txt && python3 -m pipeline.save_state ' + $('Parse Gate Approval').first().json.run_id + ' /tmp/step2_out.txt' }}"
       },
       "id": "4ceb08cf-b8df-431c-8da9-cb3809ecc273",
       "name": "2. Generate Script",
@@ -1009,7 +1009,7 @@
       },
       {
         "parameters": {
-          "jsCode": "function uuidv4(){return \"xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx\".replace(/[xy]/g,c=>{const r=Math.random()*16|0;return(c===\"x\"?r:(r&0x3|0x8)).toString(16);})}const runId=uuidv4();return[{json:{content_type:\"game_highlights\",duration:45,run_id:runId}}];"
+          "jsCode": "function uuidv4(){return \"xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx\".replace(/[xy]/g,c=>{const r=Math.random()*16|0;return(c===\"x\"?r:(r&0x3|0x8)).toString(16);})}const runId=uuidv4();return[{json:{content_type:\"trending_news\",duration:45,run_id:runId}}];"
         },
         "id": "51f40e9f-d510-4348-a905-d99239245805",
         "name": "Set Defaults",
@@ -1309,7 +1309,7 @@
       },
       {
         "parameters": {
-          "command": "={{ 'cd /home/node/instagram_stack && python -m pipeline.step2_generate_script --type trending_news --duration 45 --run-id ' + $('Parse Gate Approval').first().json.run_id + ' | tee /tmp/step2_out.txt && python3 -m pipeline.save_state ' + $('Parse Gate Approval').first().json.run_id + ' /tmp/step2_out.txt' }}"
+          "command": "={{ 'cd /home/node/instagram_stack && eval $(python3 -m pipeline.read_state ' + $('Parse Gate Approval').first().json.run_id + ') && python -m pipeline.step2_generate_script --type \"$PROPOSED_CONTENT_TYPE\" --duration \"$ESTIMATED_DURATION_SECONDS\" --topic \"$PROPOSED_TOPIC\" --angle \"$PROPOSED_ANGLE\" --visual-hook \"$VISUAL_HOOK\" --run-id ' + $('Parse Gate Approval').first().json.run_id + ' | tee /tmp/step2_out.txt && python3 -m pipeline.save_state ' + $('Parse Gate Approval').first().json.run_id + ' /tmp/step2_out.txt' }}"
         },
         "id": "4ceb08cf-b8df-431c-8da9-cb3809ecc273",
         "name": "2. Generate Script",

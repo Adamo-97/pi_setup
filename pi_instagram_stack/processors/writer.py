@@ -51,8 +51,18 @@ class Writer(BaseProcessor):
         )
 
         # Prepare context
+        planned_topic = (kwargs.get("planned_topic") or "").strip()
+        planned_angle = (kwargs.get("planned_angle") or "").strip()
+        planned_visual_hook = (kwargs.get("planned_visual_hook") or "").strip()
+
         news_data = self._format_news(news_articles or [])
         news_ids = [str(a.get("id", "")) for a in (news_articles or []) if a.get("id")]
+
+        if planned_topic and news_data.startswith("No specific news articles"):
+            news_data = (
+                "No specific matched articles were found in DB for this run. "
+                f"Stick to the approved plan topic exactly: {planned_topic}"
+            )
 
         rag_context = self.get_rag_context(
             query=news_data[:500] if news_data else content_type,
@@ -74,6 +84,9 @@ class Writer(BaseProcessor):
             previous_feedback=feedback,
             target_duration=int(target_duration),
             word_count=target_words,
+            planned_topic=planned_topic,
+            planned_angle=planned_angle,
+            planned_visual_hook=planned_visual_hook,
         )
 
         # Append revision feedback if this is a revision run

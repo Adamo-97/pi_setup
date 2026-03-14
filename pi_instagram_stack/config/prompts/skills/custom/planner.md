@@ -48,3 +48,5 @@ Respond in JSON only. Provide a detailed breakdown of this one topic:
 ---
 
 Adam, look at the trending games AND the scraped news above. Pick the single biggest AAA story that fits the Instagram audience and give me the deep-dive details in JSON.
+
+Use only one of these exact content_type values: trending_news, game_spotlight, hardware_spotlight, trailer_reaction.

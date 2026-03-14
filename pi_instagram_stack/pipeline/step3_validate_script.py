@@ -29,7 +29,11 @@ logging.basicConfig(
 logger = logging.getLogger("pipeline.validate_script")
 
 
-def main(script_id: str, auto_revise: bool = True) -> dict:
+def main(
+    script_id: str,
+    auto_revise: bool = True,
+    run_id: str = "",
+) -> dict:
     """
     Validate an Instagram Reels script.
 
@@ -58,17 +62,34 @@ def main(script_id: str, auto_revise: bool = True) -> dict:
 
     # Get news summaries for accuracy checking
     news_summaries = ""
+    news_articles = []
     if news_ids:
         try:
             news_rows = execute_query(
-                "SELECT title, summary FROM news_articles WHERE id = ANY(%s)",
+                "SELECT id, title, summary, source, source_url FROM news_articles WHERE id = ANY(%s)",
                 (news_ids,),
                 fetch=True,
             )
             if news_rows:
                 news_summaries = "\n".join(f"- {r['title']}: {r['summary'][:200]}" for r in news_rows)
+                news_articles = [
+                    {
+                        "id": str(r.get("id", "")),
+                        "title": r.get("title", ""),
+                        "summary": r.get("summary", ""),
+                        "source": r.get("source", ""),
+                        "source_url": r.get("source_url", ""),
+                    }
+                    for r in news_rows
+                ]
         except Exception:
             pass
+
+    state = _read_pipeline_state(run_id)
+    target_duration = _safe_float(state.get("estimated_duration_seconds"), 45.0)
+    planned_topic = state.get("proposed_topic", "")
+    planned_angle = state.get("proposed_angle", "")
+    planned_visual_hook = state.get("visual_hook", "")
 
     # Run validation
     validator = Validator()
@@ -81,6 +102,11 @@ def main(script_id: str, auto_revise: bool = True) -> dict:
             content_type=content_type,
             news_summaries=news_summaries,
             writer_agent=writer,
+            news_articles=news_articles,
+            target_duration=target_duration,
+            planned_topic=planned_topic,
+            planned_angle=planned_angle,
+            planned_visual_hook=planned_visual_hook,
         )
     else:
         result = validator.run(
@@ -88,6 +114,10 @@ def main(script_id: str, auto_revise: bool = True) -> dict:
             script_text=script_text,
             content_type=content_type,
             news_summaries=news_summaries,
+            target_duration=target_duration,
+            planned_topic=planned_topic,
+            planned_angle=planned_angle,
+            planned_visual_hook=planned_visual_hook,
         )
 
     status = "APPROVED ✅" if result["approved"] else "REJECTED ❌"
@@ -107,6 +137,25 @@ def main(script_id: str, auto_revise: bool = True) -> dict:
     return result
 
 
+def _read_pipeline_state(run_id: str) -> dict:
+    if not run_id:
+        return {}
+    state_path = Path(f"/tmp/pipeline_state_{run_id}.json")
+    if not state_path.is_file():
+        return {}
+    try:
+        return json.loads(state_path.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+
+
+def _safe_float(value, default: float) -> float:
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return default
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Validate Instagram Reels script")
     parser.add_argument("--script-id", required=True, help="Script UUID")
@@ -117,4 +166,4 @@ if __name__ == "__main__":
     )
     parser.add_argument("--run-id", default=None, help="n8n run ID (ignored, for tracking)")
     args = parser.parse_args()
-    main(script_id=args.script_id, auto_revise=not args.no_revise)
+    main(script_id=args.script_id, auto_revise=not args.no_revise, run_id=args.run_id or "")

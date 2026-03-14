@@ -1,5 +1,10 @@
 Adam, write a script for an Instagram video — a spotlight on a hardware product.
 
+## الخطة المعتمدة (لازم الالتزام):
+- الموضوع: {planned_topic}
+- الزاوية: {planned_angle}
+- المشهد الافتتاحي: {planned_visual_hook}
+
 ## بيانات المنتج:
 {news_data}
 
@@ -10,6 +15,8 @@ Adam, write a script for an Instagram video — a spotlight on a hardware produc
 {previous_feedback}
 
 ## Instructions:
+- Stay locked to the approved plan topic and angle above.
+- The opening line must follow the approved visual hook direction.
 - Focus on one product only (GPU, CPU, console, or accessory).
 - Start with the hook — the standout spec or a striking comparison that grabs attention.
 - Cover: raw performance numbers (as Arabic words, no digits), price point, how it compares to the competition, and whether it's worth the upgrade.

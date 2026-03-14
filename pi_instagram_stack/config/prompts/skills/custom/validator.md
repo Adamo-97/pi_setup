@@ -19,12 +19,23 @@ Evaluate the script against Adam's voice. If any of these fail, the script MUST 
 ## ElevenLabs Technical Audit
 These checks ensure the TTS engine reads the script correctly:
 
-1. **The Digit Scan (CRITICAL):** Search the entire script for the characters: 0, 1, 2, 3, 4, 5, 6, 7, 8, 9. If ANY digit is found — **REJECT immediately.** All numbers must be written as Arabic words (e.g., "خمسة وعشرون" not "25").
+1. **The Digit Scan (CRITICAL):** Search the entire script for the characters: 0, 1, 2, 3, 4, 5, 6, 7, 8, 9. If ANY digit is found — **REJECT immediately.** All numbers must be written as Arabic words (e.g., "خمسة وعشرين" not "25").
 2. **English Title Check:** Are game titles (e.g., GTA VI), company names (e.g., Ubisoft), studio names (e.g., FromSoftware), and genres (e.g., RPG, Open World) written in English (Latin script)? If any were translated to Arabic — flag each one.
 3. **Pacing Check:** Are commas used for breathing pauses? Are periods used for idea transitions? Is there excessive exclamation mark usage (more than two in the entire script)?
 4. **Banned Word Scan:** Search for هلق and مو anywhere in the script. If found — **REJECT immediately.**
 5. **Preposition Check:** Search for the pattern "ب" attached to nouns as "in the" (e.g., بالتوسعة, بالتحديث, باللعبة). The correct form uses "في" separately (في التوسعة, في التحديث, في اللعبة). If found — **flag for revision.**
 6. **Platform Fit:** Is this too long for Instagram? The script should be punchy and fast — no rambling paragraphs.
+
+## Plan & Source Alignment Audit (CRITICAL)
+1. **Plan Lock:** Compare script against approved plan fields.
+    - Approved topic: {planned_topic}
+    - Approved angle: {planned_angle}
+    - Approved visual hook: {planned_visual_hook}
+    If script drifts to a different game/story/angle, mark as critical issue.
+2. **Hook Match:** First line must align with approved visual hook direction.
+3. **Source Fidelity:** Claims should be grounded in provided news summaries.
+    - If script introduces unsupported hard claims not present in source summaries, flag as critical issue.
+4. **Single-Story Integrity:** Script should cover one coherent story only, not mixed unrelated headlines.
 
 ## Scoring Criteria (7 criteria, each scored 0-100)
 1. **hook_strength**: Does the first line grab attention immediately? (minimum: 70)
@@ -35,6 +46,9 @@ These checks ensure the TTS engine reads the script correctly:
 6. **cta_effectiveness**: Does the closing drive interaction?
 7. **instagram_fit**: Is this formatted and toned for Instagram Reels?
 
+## Extra Internal Score (must be reported in suggestions/summary)
+- **sync_alignment (0-100):** How aligned the script is with approved plan + supplied news.
+
 ## Rejection Rules
 - Overall score below 95 → REJECT
 - hook_strength below 70 → REJECT even if overall is high
@@ -44,6 +58,7 @@ These checks ensure the TTS engine reads the script correctly:
 - Wrong dialect detected → REJECT
 - هلق or مو found anywhere → REJECT
 - "ب" attached to nouns instead of "في" → flag for revision
+- sync_alignment below 90 → REJECT
 
 ## Output Format (JSON only)
 ```json
@@ -76,5 +91,11 @@ Validate this Instagram script. Is it "Adam" enough? Does it follow the ElevenLa
 ## المدة المستهدفة: {target_duration} ثانية
 ## عدد الكلمات الحالي: {word_count}
 ## المدة المقدرة: {estimated_duration} ثانية
+## الموضوع المعتمد: {planned_topic}
+## الزاوية المعتمدة: {planned_angle}
+## الافتتاح البصري المعتمد: {planned_visual_hook}
+
+## ملخص الأخبار المصدرية:
+{news_summaries}
 
 Run the full Adam Personality Check and ElevenLabs Technical Audit. Then score the 7 criteria. Return JSON only.

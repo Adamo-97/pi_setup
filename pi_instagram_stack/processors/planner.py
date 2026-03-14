@@ -114,7 +114,7 @@ class Planner(BaseProcessor):
                 plan = json.loads(match.group(1))
             else:
                 plan = {
-                    "content_type": "game_highlights",
+                    "content_type": "trending_news",
                     "topic": "لقطات مميزة — خطة احتياطية",
                     "angle": "أفضل لحظات الأسبوع",
                     "visual_hook": "هذا المشهد غير حقيقي...",
@@ -124,10 +124,15 @@ class Planner(BaseProcessor):
                     "reasoning": "خطة احتياطية",
                 }
 
+        normalized_type = self._normalize_content_type(
+            plan.get("content_type", "trending_news")
+        )
+
         result = {
             "plan_id": plan_id,
             "platform": self.PLATFORM,
-            "proposed_content_type": plan.get("content_type", "game_highlights"),
+            "proposed_content_type": normalized_type,
+            "raw_content_type": plan.get("content_type", ""),
             "proposed_topic": plan.get("topic", ""),
             "proposed_angle": plan.get("angle", ""),
             "visual_hook": plan.get("visual_hook", ""),
@@ -147,6 +152,21 @@ class Planner(BaseProcessor):
             result["estimated_cost_units"],
         )
         return result
+
+    @staticmethod
+    def _normalize_content_type(raw_type: str) -> str:
+        """Map planner labels into writer-supported content types."""
+        normalized = (raw_type or "").strip().lower()
+        aliases = {
+            "trending_news": "trending_news",
+            "game_spotlight": "game_spotlight",
+            "hardware_spotlight": "hardware_spotlight",
+            "trailer_reaction": "trailer_reaction",
+            "game_highlights": "trending_news",
+            "visual_showcase": "game_spotlight",
+            "tips_tricks": "trending_news",
+        }
+        return aliases.get(normalized, "trending_news")
 
     def _get_trending_games(self) -> str:
         """Query shared RAWG cache for visually impressive games."""

@@ -368,6 +368,35 @@ class NewsScraper:
             or []
         )
 
+    def get_unused_articles_for_topic(self, topic: str, limit: int = 10) -> List[Dict[str, Any]]:
+        """Get unused articles ranked by match quality for a target topic."""
+        articles = self.get_unused_articles(limit=100)
+        if not topic:
+            return articles[:limit]
+
+        keywords = [kw.strip().lower() for kw in topic.split() if len(kw.strip()) > 2]
+        if not keywords:
+            return articles[:limit]
+
+        scored: List[tuple[int, Dict[str, Any]]] = []
+        for article in articles:
+            haystack = f"{article.get('title', '')} {article.get('summary', '')}".lower()
+            score = sum(1 for kw in keywords if kw in haystack)
+            if score > 0:
+                scored.append((score, article))
+
+        if not scored:
+            return articles[:limit]
+
+        scored.sort(
+            key=lambda item: (
+                item[0],
+                item[1].get("published_at") or item[1].get("scraped_at") or "",
+            ),
+            reverse=True,
+        )
+        return [article for _, article in scored[:limit]]
+
     def mark_articles_used(self, article_ids: List[str]) -> None:
         """Mark articles as used."""
         if not article_ids:

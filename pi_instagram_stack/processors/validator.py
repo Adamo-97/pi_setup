@@ -66,6 +66,9 @@ class Validator(BaseProcessor):
             estimated_duration=f"{est_duration:.1f}",
             target_duration=int(kwargs.get("target_duration", 45)),
             news_summaries=news_summaries or "Not provided",
+            planned_topic=kwargs.get("planned_topic", ""),
+            planned_angle=kwargs.get("planned_angle", ""),
+            planned_visual_hook=kwargs.get("planned_visual_hook", ""),
         )
 
         try:
@@ -165,6 +168,11 @@ class Validator(BaseProcessor):
         content_type: str,
         news_summaries: Optional[str] = None,
         writer_agent: Optional[Any] = None,
+        news_articles: Optional[list] = None,
+        target_duration: float = 45.0,
+        planned_topic: str = "",
+        planned_angle: str = "",
+        planned_visual_hook: str = "",
     ) -> Dict[str, Any]:
         """
         Validate with automatic revision attempts.
@@ -179,6 +187,10 @@ class Validator(BaseProcessor):
                 script_text=current_text,
                 content_type=content_type,
                 news_summaries=news_summaries,
+                target_duration=target_duration,
+                planned_topic=planned_topic,
+                planned_angle=planned_angle,
+                planned_visual_hook=planned_visual_hook,
             )
 
             if result["approved"]:
@@ -205,10 +217,13 @@ class Validator(BaseProcessor):
 
                 revision_result = writer_agent.run(
                     content_type=content_type,
-                    news_articles=[],
-                    target_duration=45.0,
+                    news_articles=news_articles or [],
+                    target_duration=target_duration,
                     trigger_source="revision",
                     revision_feedback=revision_feedback,
+                    planned_topic=planned_topic,
+                    planned_angle=planned_angle,
+                    planned_visual_hook=planned_visual_hook,
                 )
                 current_text = revision_result["script_text"]
                 current_id = revision_result["script_id"]

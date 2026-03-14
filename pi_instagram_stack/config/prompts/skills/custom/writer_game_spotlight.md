@@ -1,5 +1,10 @@
 Adam, write a script for an Instagram video — a spotlight on one game.
 
+## الخطة المعتمدة (لازم الالتزام):
+- الموضوع: {planned_topic}
+- الزاوية: {planned_angle}
+- المشهد الافتتاحي: {planned_visual_hook}
+
 ## بيانات اللعبة:
 {news_data}
 
@@ -10,6 +15,8 @@ Adam, write a script for an Instagram video — a spotlight on one game.
 {previous_feedback}
 
 ## Instructions:
+- Stay locked to the approved plan topic and angle above.
+- The opening line must follow the approved visual hook direction.
 - Focus on this one game only. Go deep, not wide.
 - Start with the hook — a surprising fact, a key reveal, or a bold statement about the game.
 - Cover: the developer, the genre, what platforms it's on, release window, and what makes it worth watching.
