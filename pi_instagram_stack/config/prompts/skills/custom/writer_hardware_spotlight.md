@@ -22,6 +22,9 @@ Adam, write a script for an Instagram video — a spotlight on a hardware produc
 - Cover: raw performance numbers (as Arabic words, no digits), price point, how it compares to the competition, and whether it's worth the upgrade.
 - Keep the analysis objective. No fanboy energy. If a product has weaknesses, mention them.
 - Technical terms stay in English: Ray Tracing, DLSS, FSR, RDNA, Zen architecture, GDDR6X.
-- Close with: "هاد كل شي لليوم، خبروني شو رأيكم."
+- End with a short natural closing line in White Ammiya. Do NOT use a fixed template.
+- Do NOT use the exact phrase: "هاد كل شي لليوم، خبروني شو رأيكم."
+- Keep wording simple and spoken. Avoid complex vocabulary.
+- Prioritize shaddah on words that need pronunciation clarity (example: "ما طوِّل" not "ماطول").
 - Target duration: {target_duration} seconds (~{word_count} words).
 - Remember: Arabic words for ALL numbers. No digits anywhere in the script.

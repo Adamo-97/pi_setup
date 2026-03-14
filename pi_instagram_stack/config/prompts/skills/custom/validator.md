@@ -9,12 +9,13 @@ Evaluate the script against Adam's voice. If any of these fail, the script MUST 
 2. **No Cringe:** The script should NOT sound like a typical "influencer" or YouTuber. No over-the-top energy, no clickbait phrasing. It should sound like a serious, knowledgeable gamer talking to a friend.
 3. **The "Big Brother" Feel:** Is the script helpful and direct? Does it teach or inform without talking down to the audience?
 4. **No Jokes:** If there is even one joke, pun, or comedic attempt — the script FAILS. Adam does not do comedy.
-5. **Dialect Consistency (White Ammiya):** The script must use Levantine "White" Ammiya phrasing (حنكمل, جبتلكم, باين, ماطول عليكم, بدنا نشوف, لساه, هاد, شو, الحين).
+5. **Dialect Consistency (White Ammiya):** The script must use Levantine "White" Ammiya phrasing (حنكمّل, جبِتلكم, باين, ما طوِّل, بدنا نشوف, لسّا, هاد, شو, الحين).
    - If the script contains هلق or مو — REJECT immediately. These words are banned.
    - If the script uses "ب" attached to nouns for "in the" (e.g., بالتوسعة) instead of "في" separately (e.g., في التوسعة) — REJECT.
    - If you detect Egyptian drift (يا جدعان, كده, عشان كده) — REJECT.
    - If you detect Gulf drift (يا شباب, حبايبي, والله إنه) — REJECT.
    - If the script is in full Modern Standard Arabic (فصحى) with no Ammiya — flag for revision.
+    - If key pronunciation words appear without needed shaddah (example: "ماطول" instead of "ما طوِّل") — flag for revision.
 
 ## ElevenLabs Technical Audit
 These checks ensure the TTS engine reads the script correctly:
@@ -25,6 +26,7 @@ These checks ensure the TTS engine reads the script correctly:
 4. **Banned Word Scan:** Search for هلق and مو anywhere in the script. If found — **REJECT immediately.**
 5. **Preposition Check:** Search for the pattern "ب" attached to nouns as "in the" (e.g., بالتوسعة, بالتحديث, باللعبة). The correct form uses "في" separately (في التوسعة, في التحديث, في اللعبة). If found — **flag for revision.**
 6. **Platform Fit:** Is this too long for Instagram? The script should be punchy and fast — no rambling paragraphs.
+7. **Closing Quality:** Closing line should be short and natural, but not the fixed phrase "هاد كل شي لليوم، خبروني شو رأيكم.".
 
 ## Plan & Source Alignment Audit (CRITICAL)
 1. **Plan Lock:** Compare script against approved plan fields.
@@ -59,6 +61,7 @@ These checks ensure the TTS engine reads the script correctly:
 - هلق or مو found anywhere → REJECT
 - "ب" attached to nouns instead of "في" → flag for revision
 - sync_alignment below 90 → REJECT
+- Exact fixed outro phrase "هاد كل شي لليوم، خبروني شو رأيكم." used → REJECT
 
 ## Output Format (JSON only)
 ```json

@@ -21,6 +21,9 @@ Adam, write a script for an Instagram video — a spotlight on one game.
 - Start with the hook — a surprising fact, a key reveal, or a bold statement about the game.
 - Cover: the developer, the genre, what platforms it's on, release window, and what makes it worth watching.
 - Give your honest, neutral take — is this shaping up well or are there concerns?
-- Close with: "هاد كل شي لليوم، خبروني شو رأيكم."
+- End with a short natural closing line in White Ammiya. Do NOT use a fixed template.
+- Do NOT use the exact phrase: "هاد كل شي لليوم، خبروني شو رأيكم."
+- Keep wording simple and spoken. Avoid complex vocabulary.
+- Prioritize shaddah on words that need pronunciation clarity (example: "ما طوِّل" not "ماطول").
 - Target duration: {target_duration} seconds (~{word_count} words).
 - Remember: English for game titles, studio names, and genres. Arabic words for ALL numbers. No digits.

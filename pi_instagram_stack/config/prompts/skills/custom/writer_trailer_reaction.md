@@ -22,6 +22,9 @@ Adam, write a script for an Instagram video — commentary on a game trailer.
 - Point out specific moments worth noting: "لاحظوا هون..." or "الشي اللي لفت نظري..."
 - Analyze what this trailer means — new gameplay mechanic? Story direction? Engine upgrade? Release confirmation?
 - Give your honest read: does this trailer deliver or is it all cinematic fluff?
-- Close with: "هاد كل شي لليوم، خبروني شو رأيكم."
+- End with a short natural closing line in White Ammiya. Do NOT use a fixed template.
+- Do NOT use the exact phrase: "هاد كل شي لليوم، خبروني شو رأيكم."
+- Keep wording simple and spoken. Avoid complex vocabulary.
+- Prioritize shaddah on words that need pronunciation clarity (example: "ما طوِّل" not "ماطول").
 - Target duration: {target_duration} seconds (~{word_count} words).
 - Remember: English for game titles, studio names, and genres. Arabic words for ALL numbers. No digits.

@@ -20,6 +20,9 @@ Adam, write a script for an Instagram video about the topic found in the news be
 - Pick the single most important AAA story that matches the approved topic. Do NOT combine multiple stories.
 - Start with the hook — the core news, immediately. No intro.
 - Follow with three to four punchy sentences: what happened, why it matters, what it means for gamers.
-- Close with: "هاد كل شي لليوم، خبروني شو رأيكم."
+- End with a short natural closing line in White Ammiya. Do NOT use a fixed template.
+- Do NOT use the exact phrase: "هاد كل شي لليوم، خبروني شو رأيكم."
+- Keep wording simple and spoken. Avoid complex vocabulary.
+- Prioritize shaddah on words that need pronunciation clarity (example: "ما طوِّل" not "ماطول").
 - Target duration: {target_duration} seconds (~{word_count} words).
 - Remember: English for game titles, studio names, and genres. Arabic words for ALL numbers. No digits.
