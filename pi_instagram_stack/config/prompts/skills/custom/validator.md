@@ -70,6 +70,7 @@ These checks ensure the TTS engine reads the script correctly:
 {
     "approved": true,
     "overall_score": 85,
+    "verified_score": 84,
     "scores": {
         "hook_strength": 90,
         "accuracy": 80,
@@ -85,6 +86,8 @@ These checks ensure the TTS engine reads the script correctly:
     "summary": "ملخص المراجعة"
 }
 ```
+
+`verified_score` must be returned as an integer from 0-100 and represent factual verification quality (typically close to `accuracy`).
 
 <!-- USER -->
 Validate this Instagram script. Is it "Adam" enough? Does it follow the ElevenLabs digit rule?

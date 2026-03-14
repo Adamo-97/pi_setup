@@ -86,6 +86,12 @@ class Validator(BaseProcessor):
         scores = validation.get("scores", {})
         overall = validation.get("overall_score", 0)
         approved = validation.get("approved", False)
+        verified_score = validation.get("verified_score", scores.get("accuracy", 0))
+        try:
+            verified_score = int(verified_score)
+        except (TypeError, ValueError):
+            verified_score = int(scores.get("accuracy", 0) or 0)
+        validation["verified_score"] = verified_score
 
         # Enforce hard rules
         hook_score = scores.get("hook_strength", 0)
@@ -141,6 +147,7 @@ class Validator(BaseProcessor):
             "validation_id": validation_id,
             "approved": approved,
             "overall_score": overall,
+            "verified_score": verified_score,
             "scores": scores,
             "critical_issues": validation.get("critical_issues", []),
             "suggestions": validation.get("suggestions", []),

@@ -211,20 +211,50 @@ class MattermostService:
             f"{self.n8n_base_url}/webhook/instagram-comment"
         )
 
-        table_rows = "\n".join(f"| **{k}** | {v} |" for k, v in details.items())
+        def rtl_block(text: str) -> str:
+            """Use Unicode RTL mark per line for Mattermost markdown-safe RTL rendering."""
+            cleaned = (text or "").strip()
+            if not cleaned:
+                return ""
+            return "\n".join(f"\u200f{line}" for line in cleaned.splitlines())
+
+        display_details = dict(details or {})
+        script_body = (
+            display_details.pop("script_body", "")
+            or display_details.pop("script_text", "")
+            or display_details.pop("script", "")
+        )
+
+        detail_block = ""
+        score_keys = {"Score", "Hook_Score", "Verified_Score"}
+        if display_details:
+            # Keep a clean metrics table for script scoring, use markdown key-value lines elsewhere.
+            if set(display_details.keys()).issubset(score_keys):
+                rows = "\n".join(f"| **{k}** | {v} |" for k, v in display_details.items())
+                detail_block = f"| Metric | Value |\n|:------|:------|\n{rows}\n\n"
+            else:
+                detail_lines = [f"**{k}:** {v}" for k, v in display_details.items()]
+                detail_block = "\n".join(detail_lines) + "\n\n"
 
         message = (
             f"### {emoji} {label_ar}\n\n"
             f"**Pipeline Run:** `{run_id[:12]}...`\n\n"
-            f"| \u0627\u0644\u062d\u0642\u0644 | \u0627\u0644\u0642\u064a\u0645\u0629 |\n"
-            f"|:------|:------|\n"
-            f"{table_rows}\n\n"
+            f"{detail_block}"
         )
 
         if budget_status:
             message += f"**\U0001f4ca \u0627\u0644\u0645\u064a\u0632\u0627\u0646\u064a\u0629:** {budget_status}\n\n"
 
-        message += f"---\n\n{summary}\n\n"
+        if gate_number == 0:
+            message += f"---\n\n{rtl_block(summary)}\n\n"
+        else:
+            message += f"---\n\n{summary}\n\n"
+
+        if script_body:
+            message += (
+                "### \U0001f4dd نص السكريبت\n\n"
+                f"{rtl_block(script_body)}\n\n"
+            )
 
         if gate_number == 4:
             message += (
@@ -244,10 +274,11 @@ class MattermostService:
                 if fid:
                     uploaded_file_ids.append(fid)
 
-        # Comment instructions
+        # Comment instructions rendered RTL-safe without raw HTML.
         message += (
-            "\n\U0001f4ac **\u0644\u0644\u062a\u0639\u0644\u064a\u0642:** \u0623\u0631\u0633\u0644 \u0631\u062f (Reply) \u0639\u0644\u0649 \u0647\u0630\u0647 \u0627\u0644\u0631\u0633\u0627\u0644\u0629 \u0628\u0645\u0644\u0627\u062d\u0638\u0627\u062a\u0643.\n"
-            "\u0627\u0644\u062a\u0639\u0644\u064a\u0642\u0627\u062a \u062a\u064f\u062d\u0641\u0638 \u0641\u064a RAG \u0648\u064a\u062a\u0639\u0644\u0645 \u0645\u0646\u0647\u0627 \u0627\u0644\u0646\u0638\u0627\u0645.\n\n"
+            "\n"
+            f"{rtl_block('💬 **للتعليق:** أرسل رد (Reply) على هذه الرسالة بملاحظاتك.')}\n"
+            f"{rtl_block('التعليقات تُحفظ في RAG ويتعلم منها النظام.')}\n\n"
         )
 
         props = {

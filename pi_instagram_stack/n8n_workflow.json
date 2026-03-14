@@ -263,7 +263,7 @@
     },
     {
       "parameters": {
-        "command": "={{ 'cd /home/node/instagram_stack && eval $(python3 -m pipeline.read_state ' + $('Parse Gate Approval').first().json.run_id + ') && python -m pipeline.step1_scrape_news --source all --topic \"$PROPOSED_TOPIC\" --run-id ' + $('Parse Gate Approval').first().json.run_id + ' | tee /tmp/step1_out.txt && python3 -m pipeline.save_state ' + $('Parse Gate Approval').first().json.run_id + ' /tmp/step1_out.txt' }}"
+        "command": "={{ 'cd /home/node/instagram_stack && eval $(python3 -m pipeline.read_state ' + $('Parse Gate Approval').first().json.run_id + ') && python -m pipeline.step1_scrape_news --source all --topic \"$PROPOSED_TOPIC\" --games \"$GAME_SLUGS\" --run-id ' + $('Parse Gate Approval').first().json.run_id + ' | tee /tmp/step1_out.txt && python3 -m pipeline.save_state ' + $('Parse Gate Approval').first().json.run_id + ' /tmp/step1_out.txt' }}"
       },
       "id": "779232ab-30fa-42b5-b2ce-4f4aa7a79c19",
       "name": "1. Scrape News",
@@ -289,7 +289,7 @@
     },
     {
       "parameters": {
-        "command": "={{ (() => {  const arts = $json.articles || [];  const newsList = arts.slice(0,10).map((a,i) => `${i+1}. **${a.title}** (${a.source})\\n   ${a.summary || ''}`).join('\\n');  const data = {    count: String(arts.length || $json.scraped || 0),    sources: ($json.source || 'all'),    articles_summary: newsList || 'No articles scraped'  };  const cmd = 'cd /home/node/instagram_stack && echo '    + JSON.stringify(JSON.stringify(data))    + ' > /tmp/gate_data.json && python -m pipeline.gate_helper --gate 1 --data-file /tmp/gate_data.json --run-id '    + $json.run_id;  return cmd;})() }}"
+        "command": "={{ (() => {  const arts = $json.articles || [];  const plannedTopic = $json.topic || 'N/A';  const plannedGames = (($json.game_slugs || []).join(', ')) || 'N/A';  const newsList = arts.slice(0,10).map((a,i) => `${i+1}. **${a.title || 'Untitled'}** (${a.source || 'unknown'})\\n   ${(a.summary || '').substring(0, 220)}`).join('\\n\\n');  const summaryLine = `Found ${arts.length || 0} relevant updates for ${plannedTopic}.`;  const data = {    count: String(arts.length || $json.scraped || 0),    sources: ($json.source || 'all'),    topic: plannedTopic,    planned_games: plannedGames,    articles_summary: `${summaryLine}\\n\\n${newsList || 'No relevant articles scraped for the planned game.'}`  };  const cmd = 'cd /home/node/instagram_stack && echo '    + JSON.stringify(JSON.stringify(data))    + ' > /tmp/gate_data.json && python -m pipeline.gate_helper --gate 1 --data-file /tmp/gate_data.json --run-id '    + $json.run_id;  return cmd;})() }}"
       },
       "id": "3fcbcb83-6c5b-4e28-9764-90d95a9e0a26",
       "name": "Gate 1: News Approval",
@@ -354,7 +354,7 @@
     },
     {
       "parameters": {
-        "command": "={{ (() => {  const scriptText = ($('Parse Script').first().json.script_text || '').substring(0, 3000);  const data = {    score: String($json.overall_score || 0) + '/100',    hook_score: String(($json.scores || {}).hook_strength || $json.hook_score || 0) + '/100',    approved: $json.approved ? 'Yes' : 'No',    revisions: String($json.revision_count || 0),    script: scriptText  };  const cmd = 'cd /home/node/instagram_stack && echo '    + JSON.stringify(JSON.stringify(data))    + ' > /tmp/gate_data.json && python -m pipeline.gate_helper --gate 2 --data-file /tmp/gate_data.json --run-id '    + $json.run_id;  return cmd;})() }}"
+        "command": "={{ (() => {  const overall = ($json.overall_score || 0);  const hook = (($json.scores || {}).hook_strength || $json.hook_score || 0);  const verified = ($json.verified_score || (($json.scores || {}).accuracy || 0));  if (!$json.approved) {    return 'cd /home/node/instagram_stack && echo '      + JSON.stringify(JSON.stringify({ status: 'skipped_low_quality', overall_score: overall, hook_score: hook, verified_score: verified }))      + ' > /tmp/gate2_skip.json';  }  const scriptText = ($('Parse Script').first().json.script_text || '').substring(0, 3000);  const data = {    Score: String(overall) + '/100',    Hook_Score: String(hook) + '/100',    Verified_Score: String(verified) + '/100',    script_body: scriptText  };  const cmd = 'cd /home/node/instagram_stack && echo '    + JSON.stringify(JSON.stringify(data))    + ' > /tmp/gate_data.json && python -m pipeline.gate_helper --gate 2 --data-file /tmp/gate_data.json --run-id '    + $json.run_id;  return cmd;})() }}"
       },
       "id": "fd5cf8b7-2bf8-4c6e-a1be-32b7a97acfd2",
       "name": "Gate 2: Script Approval",
@@ -1270,7 +1270,7 @@
       },
       {
         "parameters": {
-          "command": "={{ 'cd /home/node/instagram_stack && python -m pipeline.step1_scrape_news --source all --run-id ' + $('Parse Gate Approval').first().json.run_id + ' | tee /tmp/step1_out.txt && python3 -m pipeline.save_state ' + $('Parse Gate Approval').first().json.run_id + ' /tmp/step1_out.txt' }}"
+          "command": "={{ 'cd /home/node/instagram_stack && eval $(python3 -m pipeline.read_state ' + $('Parse Gate Approval').first().json.run_id + ') && python -m pipeline.step1_scrape_news --source all --topic \"$PROPOSED_TOPIC\" --games \"$GAME_SLUGS\" --run-id ' + $('Parse Gate Approval').first().json.run_id + ' | tee /tmp/step1_out.txt && python3 -m pipeline.save_state ' + $('Parse Gate Approval').first().json.run_id + ' /tmp/step1_out.txt' }}"
         },
         "id": "779232ab-30fa-42b5-b2ce-4f4aa7a79c19",
         "name": "1. Scrape News",
@@ -1296,7 +1296,7 @@
       },
       {
         "parameters": {
-          "command": "={{ (() => {  const arts = $json.articles || [];  const newsList = arts.slice(0,10).map((a,i) => `${i+1}. **${a.title}** (${a.source})\\n   ${a.summary || ''}`).join('\\n');  const data = {    count: String(arts.length || $json.scraped || 0),    sources: ($json.source || 'all'),    articles_summary: newsList || 'No articles scraped'  };  const cmd = 'cd /home/node/instagram_stack && echo '    + JSON.stringify(JSON.stringify(data))    + ' > /tmp/gate_data.json && python -m pipeline.gate_helper --gate 1 --data-file /tmp/gate_data.json --run-id '    + $json.run_id;  return cmd;})() }}"
+          "command": "={{ (() => {  const arts = $json.articles || [];  const plannedTopic = $json.topic || 'N/A';  const plannedGames = (($json.game_slugs || []).join(', ')) || 'N/A';  const newsList = arts.slice(0,10).map((a,i) => `${i+1}. **${a.title || 'Untitled'}** (${a.source || 'unknown'})\\n   ${(a.summary || '').substring(0, 220)}`).join('\\n\\n');  const summaryLine = `Found ${arts.length || 0} relevant updates for ${plannedTopic}.`;  const data = {    count: String(arts.length || $json.scraped || 0),    sources: ($json.source || 'all'),    topic: plannedTopic,    planned_games: plannedGames,    articles_summary: `${summaryLine}\\n\\n${newsList || 'No relevant articles scraped for the planned game.'}`  };  const cmd = 'cd /home/node/instagram_stack && echo '    + JSON.stringify(JSON.stringify(data))    + ' > /tmp/gate_data.json && python -m pipeline.gate_helper --gate 1 --data-file /tmp/gate_data.json --run-id '    + $json.run_id;  return cmd;})() }}"
         },
         "id": "3fcbcb83-6c5b-4e28-9764-90d95a9e0a26",
         "name": "Gate 1: News Approval",
@@ -1361,7 +1361,7 @@
       },
       {
         "parameters": {
-          "command": "={{ (() => {  const scriptText = ($('Parse Script').first().json.script_text || '').substring(0, 3000);  const data = {    score: String($json.overall_score || 0) + '/100',    hook_score: String(($json.scores || {}).hook_strength || $json.hook_score || 0) + '/100',    approved: $json.approved ? 'Yes' : 'No',    revisions: String($json.revision_count || 0),    script: scriptText  };  const cmd = 'cd /home/node/instagram_stack && echo '    + JSON.stringify(JSON.stringify(data))    + ' > /tmp/gate_data.json && python -m pipeline.gate_helper --gate 2 --data-file /tmp/gate_data.json --run-id '    + $json.run_id;  return cmd;})() }}"
+          "command": "={{ (() => {  const overall = ($json.overall_score || 0);  const hook = (($json.scores || {}).hook_strength || $json.hook_score || 0);  const verified = ($json.verified_score || (($json.scores || {}).accuracy || 0));  if (!$json.approved) {    return 'cd /home/node/instagram_stack && echo '      + JSON.stringify(JSON.stringify({ status: 'skipped_low_quality', overall_score: overall, hook_score: hook, verified_score: verified }))      + ' > /tmp/gate2_skip.json';  }  const scriptText = ($('Parse Script').first().json.script_text || '').substring(0, 3000);  const data = {    Score: String(overall) + '/100',    Hook_Score: String(hook) + '/100',    Verified_Score: String(verified) + '/100',    script_body: scriptText  };  const cmd = 'cd /home/node/instagram_stack && echo '    + JSON.stringify(JSON.stringify(data))    + ' > /tmp/gate_data.json && python -m pipeline.gate_helper --gate 2 --data-file /tmp/gate_data.json --run-id '    + $json.run_id;  return cmd;})() }}"
         },
         "id": "fd5cf8b7-2bf8-4c6e-a1be-32b7a97acfd2",
         "name": "Gate 2: Script Approval",

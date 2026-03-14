@@ -6,7 +6,6 @@ Multi-source gaming & hardware news aggregation: RSS, Google News (SerpApi), Red
 Deduplicates via URL uniqueness and RAG similarity.
 """
 
-import hashlib
 import json
 import logging
 import re
@@ -34,13 +33,23 @@ class NewsScraper:
     # RAWG.io — Game Database
     # ================================================================
 
-    def scrape_rawg(self, topic: str = "", max_results: int = 10) -> List[Dict[str, Any]]:
+    def scrape_rawg(
+        self,
+        topic: str = "",
+        game_slugs: Optional[List[str]] = None,
+        max_results: int = 10,
+    ) -> List[Dict[str, Any]]:
         """Fetch recent/relevant games from RAWG.io matching the topic."""
         if not self._rawg_key:
             logger.info("RAWG API key not set — skipping RAWG.")
             return []
 
         articles = []
+        normalized_slugs = [slug.strip() for slug in (game_slugs or []) if slug.strip()]
+
+        if normalized_slugs:
+            return self._scrape_rawg_by_slugs(normalized_slugs, max_results=max_results)
+
         params: Dict[str, Any] = {
             "key": self._rawg_key,
             "page_size": max_results,
@@ -93,6 +102,63 @@ class NewsScraper:
         except Exception as exc:
             logger.warning("RAWG scrape failed: %s", exc)
 
+        return articles
+
+    def _scrape_rawg_by_slugs(
+        self,
+        game_slugs: List[str],
+        max_results: int = 10,
+    ) -> List[Dict[str, Any]]:
+        """Fetch exact games from RAWG by known slugs to avoid off-topic results."""
+        if not self._rawg_key:
+            logger.info("RAWG API key not set — skipping RAWG.")
+            return []
+
+        articles: List[Dict[str, Any]] = []
+        for slug in game_slugs[:max_results]:
+            try:
+                resp = requests.get(
+                    f"https://api.rawg.io/api/games/{slug}",
+                    params={"key": self._rawg_key},
+                    timeout=20,
+                )
+                resp.raise_for_status()
+                game = resp.json()
+
+                genres = ", ".join(g["name"] for g in game.get("genres", []))
+                platforms = ", ".join(
+                    p["platform"]["name"]
+                    for p in game.get("platforms", [])
+                    if p.get("platform", {}).get("name")
+                )
+                summary = (
+                    f"Rating: {game.get('rating', 'N/A')}/5 | "
+                    f"Genres: {genres or 'N/A'} | "
+                    f"Platforms: {platforms or 'N/A'}"
+                )
+                articles.append(
+                    {
+                        "source": "rawg",
+                        "source_url": f"https://rawg.io/games/{game.get('slug', slug)}",
+                        "title": game.get("name", slug.replace("-", " ").title()),
+                        "summary": summary,
+                        "category": "gaming",
+                        "published_at": self._parse_date(game.get("released", "")),
+                        "metadata": {
+                            "rawg_id": game.get("id"),
+                            "rating": game.get("rating"),
+                            "ratings_count": game.get("ratings_count"),
+                            "genres": genres,
+                            "platforms": platforms,
+                            "background_image": game.get("background_image", ""),
+                            "game_slug": slug,
+                        },
+                    }
+                )
+            except Exception as exc:
+                logger.warning("RAWG slug fetch failed (%s): %s", slug, exc)
+
+        logger.info("RAWG by slugs: %d games for %s", len(articles), ",".join(game_slugs))
         return articles
 
     # ================================================================
@@ -293,33 +359,45 @@ class NewsScraper:
     # Aggregate + Store
     # ================================================================
 
-    def scrape_all(self, topic: str = "") -> List[Dict[str, Any]]:
+    def scrape_all(self, topic: str = "", game_slugs: Optional[List[str]] = None) -> List[Dict[str, Any]]:
         """Scrape all sources and return combined, deduplicated articles.
         
         If topic is provided, Google News searches for that topic specifically
         and RSS/Reddit results are filtered to only include relevant articles.
         """
-        google_query = f"{topic} gaming" if topic else "gaming hardware news"
+        game_slugs = [slug.strip() for slug in (game_slugs or []) if slug.strip()]
+        strict_game_mode = bool(game_slugs)
+        base_query = " ".join(slug.replace("-", " ") for slug in game_slugs) if strict_game_mode else topic
+        google_query = f"{base_query} gaming" if base_query else "gaming hardware news"
         rss_articles = self.scrape_rss()
         google_articles = self.scrape_google_news(query=google_query)
         reddit_articles = self.scrape_reddit()
-        rawg_articles = self.scrape_rawg(topic=topic)
+        rawg_articles = self.scrape_rawg(topic=topic, game_slugs=game_slugs)
 
-        if topic:
-            keywords = [kw.strip().lower() for kw in topic.split() if len(kw.strip()) > 2]
+        if base_query:
+            keywords = self._topic_keywords(base_query)
             rss_articles = self._filter_by_topic(rss_articles, keywords)
+            google_articles = self._filter_by_topic(google_articles, keywords)
             reddit_articles = self._filter_by_topic(reddit_articles, keywords)
+
+            # In strict game mode, do not keep non-matching data.
+            if strict_game_mode:
+                rawg_articles = self._filter_by_topic(rawg_articles, keywords)
 
         all_articles = rawg_articles + google_articles + rss_articles + reddit_articles
         deduplicated = self._deduplicate(all_articles)
 
+        if strict_game_mode:
+            deduplicated = self._filter_by_game_slugs(deduplicated, game_slugs)
+
         logger.info(
-            "Total scraped: %d (RAWG=%d, Google=%d, RSS=%d, Reddit=%d) → %d after dedup",
+            "Total scraped: %d (RAWG=%d, Google=%d, RSS=%d, Reddit=%d, strict=%s) → %d after dedup",
             len(all_articles),
             len(rawg_articles),
             len(google_articles),
             len(rss_articles),
             len(reddit_articles),
+            strict_game_mode,
             len(deduplicated),
         )
         return deduplicated
@@ -374,7 +452,7 @@ class NewsScraper:
         if not topic:
             return articles[:limit]
 
-        keywords = [kw.strip().lower() for kw in topic.split() if len(kw.strip()) > 2]
+        keywords = self._topic_keywords(topic)
         if not keywords:
             return articles[:limit]
 
@@ -437,6 +515,54 @@ class NewsScraper:
             if any(kw in text for kw in keywords):
                 filtered.append(a)
         return filtered
+
+    @staticmethod
+    def _topic_keywords(topic: str) -> List[str]:
+        """Build robust keyword set from topic text/slugs for strict matching."""
+        raw_tokens = re.split(r"[\s,;|/_-]+", topic.lower())
+        keywords = [tok for tok in raw_tokens if len(tok.strip()) > 2]
+        return list(dict.fromkeys(keywords))
+
+    @classmethod
+    def _filter_by_game_slugs(
+        cls,
+        articles: List[Dict[str, Any]],
+        game_slugs: List[str],
+    ) -> List[Dict[str, Any]]:
+        """Keep only items that strongly match at least one planned game slug."""
+        filtered: List[Dict[str, Any]] = []
+        for article in articles:
+            if cls._matches_any_game_slug(article, game_slugs):
+                filtered.append(article)
+        return filtered
+
+    @staticmethod
+    def _matches_any_game_slug(article: Dict[str, Any], game_slugs: List[str]) -> bool:
+        text = (
+            f"{article.get('title', '')} "
+            f"{article.get('summary', '')} "
+            f"{article.get('source_url', '')}"
+        ).lower()
+        normalized_text = re.sub(r"[^a-z0-9\s-]+", " ", text)
+
+        for slug in game_slugs:
+            normalized_slug = slug.strip().lower()
+            if not normalized_slug:
+                continue
+
+            phrase = normalized_slug.replace("-", " ")
+            tokens = [t for t in normalized_slug.split("-") if len(t) > 2]
+
+            # Strong match: full slug/phrase found in article text.
+            if normalized_slug in normalized_text or phrase in normalized_text:
+                return True
+
+            # Secondary match: at least 2 meaningful game tokens in the same article.
+            token_hits = sum(1 for token in tokens if token in normalized_text)
+            if token_hits >= 2:
+                return True
+
+        return False
 
     @staticmethod
     def _clean_html(text: str) -> str:
