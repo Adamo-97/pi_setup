@@ -27,6 +27,7 @@ These checks ensure the TTS engine reads the script correctly:
 5. **Preposition Check:** Search for the pattern "ب" attached to nouns as "in the" (e.g., بالتوسعة, بالتحديث, باللعبة). The correct form uses "في" separately (في التوسعة, في التحديث, في اللعبة). If found — **flag for revision.**
 6. **Platform Fit:** Is this too long for Instagram? The script should be punchy and fast — no rambling paragraphs.
 7. **Closing Quality:** Closing line should be short and natural, but not the fixed phrase "هاد كل شي لليوم، خبروني شو رأيكم.".
+8. **Tripple A Wording Rule:** If the script mentions the category, it must be written as "Tripple A" and never as "AAA".
 
 ## Plan & Source Alignment Audit (CRITICAL)
 1. **Plan Lock:** Compare script against approved plan fields.
@@ -62,6 +63,7 @@ These checks ensure the TTS engine reads the script correctly:
 - "ب" attached to nouns instead of "في" → flag for revision
 - sync_alignment below 90 → REJECT
 - Exact fixed outro phrase "هاد كل شي لليوم، خبروني شو رأيكم." used → REJECT
+- Acronym "AAA" used instead of "Tripple A" → REJECT
 
 ## Output Format (JSON only)
 ```json

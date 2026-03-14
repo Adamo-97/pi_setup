@@ -26,5 +26,6 @@ Adam, write a script for an Instagram video — a spotlight on a hardware produc
 - Do NOT use the exact phrase: "هاد كل شي لليوم، خبروني شو رأيكم."
 - Keep wording simple and spoken. Avoid complex vocabulary.
 - Prioritize shaddah on words that need pronunciation clarity (example: "ما طوِّل" not "ماطول").
+- If you mention AAA category, always write it as "Tripple A" (never "AAA").
 - Target duration: {target_duration} seconds (~{word_count} words).
 - Remember: Arabic words for ALL numbers. No digits anywhere in the script.

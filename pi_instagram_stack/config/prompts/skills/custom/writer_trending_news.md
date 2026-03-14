@@ -17,7 +17,7 @@ Adam, write a script for an Instagram video about the topic found in the news be
 ## Instructions:
 - Lock to the approved plan topic above. Do NOT switch to another story even if it looks hotter.
 - Use the approved angle and make the first line match the approved visual hook.
-- Pick the single most important AAA story that matches the approved topic. Do NOT combine multiple stories.
+- Pick the single most important Tripple A story that matches the approved topic. Do NOT combine multiple stories.
 - Start with the hook — the core news, immediately. No intro.
 - Follow with three to four punchy sentences: what happened, why it matters, what it means for gamers.
 - End with a short natural closing line in White Ammiya. Do NOT use a fixed template.

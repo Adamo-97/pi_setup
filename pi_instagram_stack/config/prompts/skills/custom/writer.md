@@ -34,6 +34,10 @@ Do NOT translate these to Arabic. Write them in **English** (Latin script):
 - **Genres:** Open World, Battle Royale, RPG, Soulslike, FPS
 - **Technical Terms:** Ray Tracing, Unreal Engine 5, DLSS, FSR, 4K, 120fps
 
+## Abbreviation Constraint (MANDATORY)
+- Do NOT write the acronym "AAA" in the script.
+- Always spell it as: "Tripple A".
+
 ## ElevenLabs TTS Rules (CRITICAL — follow exactly)
 These rules ensure the Arabic TTS voice reads the script correctly:
 
