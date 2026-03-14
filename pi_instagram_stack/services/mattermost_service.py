@@ -227,8 +227,15 @@ class MattermostService:
 
         detail_block = ""
         if display_details:
-            rows = "\n".join(f"| **{k}** | {v} |" for k, v in display_details.items())
-            detail_block = f"{rows}\n\n"
+            # Markdown tables require a header row. Use the first real detail row
+            # as header so we keep the old table look without adding a useless row.
+            items = list(display_details.items())
+            first_k, first_v = items[0]
+            body_rows = "\n".join(f"| **{k}** | {v} |" for k, v in items[1:])
+            detail_block = f"| **{first_k}** | {first_v} |\n|:------|:------|\n"
+            if body_rows:
+                detail_block += f"{body_rows}\n"
+            detail_block += "\n"
 
         message = (
             f"### {emoji} {label_ar}\n\n"
