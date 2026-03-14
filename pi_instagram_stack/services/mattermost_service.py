@@ -226,15 +226,10 @@ class MattermostService:
         )
 
         detail_block = ""
-        score_keys = {"Score", "Hook_Score", "Verified_Score"}
         if display_details:
-            # Keep a clean metrics table for script scoring, use markdown key-value lines elsewhere.
-            if set(display_details.keys()).issubset(score_keys):
-                rows = "\n".join(f"| **{k}** | {v} |" for k, v in display_details.items())
-                detail_block = f"| Metric | Value |\n|:------|:------|\n{rows}\n\n"
-            else:
-                detail_lines = [f"**{k}:** {v}" for k, v in display_details.items()]
-                detail_block = "\n".join(detail_lines) + "\n\n"
+            # Headerless table-style block to avoid blank/useless header rows in Mattermost.
+            rows = "\n".join(f"| **{k}** | {v} |" for k, v in display_details.items())
+            detail_block = f"```text\n{rows}\n```\n\n"
 
         message = (
             f"### {emoji} {label_ar}\n\n"
