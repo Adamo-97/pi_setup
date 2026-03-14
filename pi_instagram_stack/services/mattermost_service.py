@@ -227,9 +227,8 @@ class MattermostService:
 
         detail_block = ""
         if display_details:
-            # Headerless table-style block to avoid blank/useless header rows in Mattermost.
             rows = "\n".join(f"| **{k}** | {v} |" for k, v in display_details.items())
-            detail_block = f"```text\n{rows}\n```\n\n"
+            detail_block = f"{rows}\n\n"
 
         message = (
             f"### {emoji} {label_ar}\n\n"
