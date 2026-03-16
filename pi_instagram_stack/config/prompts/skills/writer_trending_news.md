@@ -1,9 +1,9 @@
-اكتب سكريبت Instagram Reels باللغة العربية عن أحدث أخبار الألعاب والهاردوير.
+Adam, write a script for an Instagram video about the topic found in the news below.
 
-## الخطة المعتمدة:
+## الخطة المعتمدة (لازم الالتزام):
 - الموضوع: {planned_topic}
 - الزاوية: {planned_angle}
-- الخطاف البصري: {planned_visual_hook}
+- المشهد الافتتاحي: {planned_visual_hook}
 
 ## الأخبار المتاحة:
 {news_data}
@@ -14,11 +14,17 @@
 ## ملاحظات من مراجعات سابقة:
 {previous_feedback}
 
-## المطلوب:
-- التزم بالخطة المعتمدة حرفيًا، ولا تخرج لموضوع لعبة أخرى غير المخطط لها.
-- اختر أهم 2-3 أخبار وادمجها في سكريبت واحد سريع
-- ابدأ بأقوى خبر كخطاف
-- المدة المستهدفة: {target_duration} ثانية ({word_count} كلمة)
-- أضف علامات المونتاج [قطع] [بطيء] [نص] [صوت↑] [زوم]
-- أضف هاشتاقات Instagram في نهاية السكريبت
-- حافظ على الطابع الجمالي لـ Instagram — أنيق ومصقول
+## Instructions:
+- Lock to the approved plan topic above. Do NOT switch to another story.
+- Use the approved angle and make the first line match the approved visual hook.
+- Pick the single most important Tripple A story that matches the approved topic. Do NOT combine multiple stories.
+- Start with the hook — the core news, immediately. No intro.
+- Follow with three to four punchy sentences: what happened, why it matters, what it means for gamers.
+- End with a short natural closing line in White Ammiya. Do NOT use a fixed template.
+- Do NOT use the exact phrase: "هاد كل شي لليوم، خبِّروني شو رأيكم."
+- Keep wording simple and spoken — Levantine ammiya only.
+- SHADDAH IS MANDATORY on every doubled consonant. Example: "خلِّينا" not "خلينا".
+- NO FUSHA: do not use هذا، ماذا، لماذا، الآن، كثيراً، أصبح، سوف، يُعدّ، يتيح، وفقاً، نظراً.
+- The script MUST end with a complete sentence and a period.
+- Target duration: {target_duration} seconds (~{word_count} words).
+- English for game titles, studio names, and genres. Arabic words for ALL numbers. No digits.

@@ -1,4 +1,9 @@
-اكتب سكريبت Instagram Reels باللغة العربية — spotlight على لعبة واحدة.
+Adam, write a script for an Instagram video — a spotlight on one game.
+
+## الخطة المعتمدة (لازم الالتزام):
+- الموضوع: {planned_topic}
+- الزاوية: {planned_angle}
+- المشهد الافتتاحي: {planned_visual_hook}
 
 ## بيانات اللعبة:
 {news_data}
@@ -9,11 +14,19 @@
 ## ملاحظات سابقة:
 {previous_feedback}
 
-## المطلوب:
-- ركز على لعبة واحدة فقط
-- ابدأ بسؤال مثير أو إحصائية صادمة عن اللعبة
-- اذكر: المنصات، الأسعار، النقاط المميزة
-- المدة: {target_duration} ثانية ({word_count} كلمة)
-- أضف علامات المونتاج
-- أضف هاشتاقات Instagram مناسبة
-- استخدم أسلوب Instagram الجمالي
+## Instructions:
+- Stay locked to the approved plan topic and angle above.
+- The opening line must follow the approved visual hook direction.
+- Focus on this one game only. Go deep, not wide.
+- Start with the hook — a surprising fact, a key reveal, or a bold statement about the game.
+- Cover: the developer, the genre, platforms, release window, and what makes it worth watching.
+- Give your honest, neutral take.
+- End with a short natural closing line in White Ammiya. No fixed template.
+- Do NOT use: "هاد كل شي لليوم، خبِّروني شو رأيكم."
+- Keep wording simple and spoken — Levantine ammiya only.
+- SHADDAH IS MANDATORY on every doubled consonant.
+- NO FUSHA words.
+- The script MUST end with a complete sentence and a period.
+- If you mention AAA category, write "Tripple A" (never "AAA").
+- Target duration: {target_duration} seconds (~{word_count} words).
+- English for game titles, studio names, and genres. Arabic words for ALL numbers. No digits.

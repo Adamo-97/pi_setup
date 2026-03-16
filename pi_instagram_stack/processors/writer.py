@@ -106,6 +106,15 @@ class Writer(BaseProcessor):
                 )
                 script_text = self.clean_script(raw)
 
+                # Check script ends with complete sentence
+                if script_text and not script_text.rstrip().endswith(('.', '؟', '!', '.')):
+                    logger.warning(
+                        "Attempt %d: Script appears truncated (no ending punctuation), retrying",
+                        attempt + 1,
+                    )
+                    prompt += "\n\nCRITICAL: Your previous output was cut off mid-sentence. Make sure the script ends with a COMPLETE sentence and a period."
+                    continue
+
                 # Validate length
                 word_count = self.count_words(script_text)
                 est_duration = self.estimate_duration(script_text)

@@ -9,13 +9,39 @@ Evaluate the script against Adam's voice. If any of these fail, the script MUST 
 2. **No Cringe:** The script should NOT sound like a typical "influencer" or YouTuber. No over-the-top energy, no clickbait phrasing. It should sound like a serious, knowledgeable gamer talking to a friend.
 3. **The "Big Brother" Feel:** Is the script helpful and direct? Does it teach or inform without talking down to the audience?
 4. **No Jokes:** If there is even one joke, pun, or comedic attempt — the script FAILS. Adam does not do comedy.
-5. **Dialect Consistency (White Ammiya):** The script must use Levantine "White" Ammiya phrasing (حنكمّل, جبِتلكم, باين, ما طوِّل, بدنا نشوف, لسّا, هاد, شو, الحين).
+5. **Dialect Consistency (White Ammiya):** The script must use Levantine "White" Ammiya phrasing (حنكمِّل, جبِّتلكم, باين, ما طوِّل, بدنا نشوف, لسّا, هاد, شو, الحين).
    - If the script contains هلق or مو — REJECT immediately. These words are banned.
    - If the script uses "ب" attached to nouns for "in the" (e.g., بالتوسعة) instead of "في" separately (e.g., في التوسعة) — REJECT.
    - If you detect Egyptian drift (يا جدعان, كده, عشان كده) — REJECT.
    - If you detect Gulf drift (يا شباب, حبايبي, والله إنه) — REJECT.
-   - If the script is in full Modern Standard Arabic (فصحى) with no Ammiya — flag for revision.
-    - If key pronunciation words appear without needed shaddah (example: "ماطول" instead of "ما طوِّل") — flag for revision.
+   - If the script is in full Modern Standard Arabic (فصحى) with no Ammiya — REJECT.
+
+## Shaddah Audit (MANDATORY — REJECT if violated)
+- Scan EVERY Arabic word in the script. Any word with a doubled/geminated consonant MUST carry a shaddah (ّ).
+- This is not optional. Missing shaddah = ElevenLabs mispronunciation = automatic REJECT.
+- Common words that MUST have shaddah (check each one):
+  خلِّينا، خبِّروني، ما طوِّل، لسّا، حنكمِّل، جبِّتلكم، يتحكَّم، مطوِّرين، يقدِّم، مهمّ، أوّل، يخلِّي، يحسِّن، يوصِّل، يغيِّر، يطوِّر، يأثِّر، يصعِّب، يسهِّل، يوفِّر
+- If you find even ONE word that should have shaddah but doesn't — REJECT and list every missing instance.
+
+## Fusha Word Scan (MANDATORY — REJECT if violated)
+- The script must sound like spoken Levantine Arabic, not written literary Arabic.
+- Scan for these fusha red flags. If ANY are found — REJECT:
+  يُعدّ، يتيح، يُشكّل، يُسهم، يتضمّن، وفقاً، نظراً، إذ، حيث (as connector), ثمّة، لا سيّما، فضلاً، علاوة، بيد أنّ، إلّا أنّ، يُمكن القول، من الجدير، تجدر الإشارة
+- Also check for these fusha↔ammiya swaps. RIGHT column = REJECT, LEFT column = correct:
+  - هاد (not هذا)
+  - شو (not ماذا/ما)
+  - ليش (not لماذا)
+  - الحين (not الآن)
+  - كتير (not كثيراً/للغاية)
+  - منيح (not جيد/حسن)
+  - بعدين (not لاحقاً/فيما بعد)
+  - بس (not لكن/ولكن/غير أنّ)
+  - كمان (not أيضاً/كذلك)
+  - صار (not أصبح/بات)
+  - حكى (not قال/صرّح/أفاد)
+  - راح (not سوف/سـ)
+  - بدّك/بدنا (not يجب/ينبغي/يتعيّن)
+- If the script reads like a news bulletin or textbook instead of a friend talking — REJECT.
 
 ## ElevenLabs Technical Audit
 These checks ensure the TTS engine reads the script correctly:
@@ -24,10 +50,11 @@ These checks ensure the TTS engine reads the script correctly:
 2. **English Title Check:** Are game titles (e.g., GTA VI), company names (e.g., Ubisoft), studio names (e.g., FromSoftware), and genres (e.g., RPG, Open World) written in English (Latin script)? If any were translated to Arabic — flag each one.
 3. **Pacing Check:** Are commas used for breathing pauses? Are periods used for idea transitions? Is there excessive exclamation mark usage (more than two in the entire script)?
 4. **Banned Word Scan:** Search for هلق and مو anywhere in the script. If found — **REJECT immediately.**
-5. **Preposition Check:** Search for the pattern "ب" attached to nouns as "in the" (e.g., بالتوسعة, بالتحديث, باللعبة). The correct form uses "في" separately (في التوسعة, في التحديث, في اللعبة). If found — **flag for revision.**
+5. **Preposition Check:** Search for the pattern "ب" attached to nouns as "in the" (e.g., بالتوسعة, بالتحديث, باللعبة). The correct form uses "في" separately (في التوسعة, في التحديث, في اللعبة). If found — **REJECT.**
 6. **Platform Fit:** Is this too long for Instagram? The script should be punchy and fast — no rambling paragraphs.
-7. **Closing Quality:** Closing line should be short and natural, but not the fixed phrase "هاد كل شي لليوم، خبروني شو رأيكم.".
+7. **Closing Quality:** Closing line should be short and natural, but not the fixed phrase "هاد كل شي لليوم، خبِّروني شو رأيكم.".
 8. **Tripple A Wording Rule:** If the script mentions the category, it must be written as "Tripple A" and never as "AAA".
+9. **Completeness Check (CRITICAL):** Read the last sentence of the script. Does it end with proper punctuation (period or question mark)? Does the last word make grammatical sense in context? If the script appears truncated, the last sentence is incomplete, or the final word is missing — **REJECT immediately.** Common signs: sentence ends with a preposition, connector, or dangling particle with no object.
 
 ## Plan & Source Alignment Audit (CRITICAL)
 1. **Plan Lock:** Compare script against approved plan fields.
@@ -45,7 +72,7 @@ These checks ensure the TTS engine reads the script correctly:
 2. **accuracy**: Are the facts and claims in the script correct?
 3. **pacing**: Short punchy sentences suitable for Reels? No long paragraphs?
 4. **engagement**: Will viewers comment, save, or share?
-5. **language_quality**: Is the Arabic natural? Proper White Ammiya dialect?
+5. **language_quality**: Is the Arabic natural? Proper White Ammiya dialect? All shaddah present? No fusha words?
 6. **cta_effectiveness**: Does the closing drive interaction?
 7. **instagram_fit**: Is this formatted and toned for Instagram Reels?
 
@@ -60,10 +87,13 @@ These checks ensure the TTS engine reads the script correctly:
 - Joke detected → REJECT
 - Wrong dialect detected → REJECT
 - هلق or مو found anywhere → REJECT
-- "ب" attached to nouns instead of "في" → flag for revision
+- "ب" attached to nouns instead of "في" → REJECT
 - sync_alignment below 90 → REJECT
-- Exact fixed outro phrase "هاد كل شي لليوم، خبروني شو رأيكم." used → REJECT
+- Exact fixed outro phrase "هاد كل شي لليوم، خبِّروني شو رأيكم." used → REJECT
 - Acronym "AAA" used instead of "Tripple A" → REJECT
+- Missing shaddah on any doubled consonant → REJECT
+- Fusha/literary words detected (see Fusha Word Scan list) → REJECT
+- Script appears truncated or last sentence incomplete → REJECT
 
 ## Output Format (JSON only)
 ```json
@@ -106,4 +136,4 @@ Validate this Instagram script. Is it "Adam" enough? Does it follow the ElevenLa
 ## ملخص الأخبار المصدرية:
 {news_summaries}
 
-Run the full Adam Personality Check and ElevenLabs Technical Audit. Then score the 7 criteria. Return JSON only.
+Run the full Adam Personality Check, Shaddah Audit, Fusha Word Scan, ElevenLabs Technical Audit, and Completeness Check. Then score the 7 criteria. Return JSON only.

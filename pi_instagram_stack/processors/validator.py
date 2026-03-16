@@ -215,11 +215,15 @@ class Validator(BaseProcessor):
                 issues = "\n".join(f"- {i}" for i in result["critical_issues"])
                 suggestions = "\n".join(f"- {s}" for s in result["suggestions"])
                 revision_feedback = (
-                    f"السكريبت السابق حصل على {result['overall_score']}/100.\n"
-                    f"المشاكل:\n{issues}\n"
-                    f"الاقتراحات:\n{suggestions}\n"
-                    f"النص السابق:\n{current_text[:500]}\n"
-                    f"أعد كتابة السكريبت مع تطبيق كل الملاحظات."
+                    f"السكريبت السابق حصل على {result['overall_score']}/100.\n\n"
+                    f"## مشاكل يجب حلّها (كل مشكلة = سبب رفض):\n{issues}\n\n"
+                    f"## اقتراحات تحسين:\n{suggestions}\n\n"
+                    f"## النص المرفوض:\n{current_text}\n\n"
+                    f"أعد كتابة السكريبت الكامل من الصفر مع تطبيق كل الملاحظات أعلاه. "
+                    f"لا تنسخ النص السابق — اكتب نسخة جديدة تماماً تحلّ كل المشاكل. "
+                    f"تأكّد أن كل كلمة فيها حرف مشدّد تحمل شدّة، "
+                    f"وأن كل الكلمات عاميّة بسيطة مش فصحى، "
+                    f"وأن السكريبت ينتهي بجملة كاملة."
                 )
 
                 revision_result = writer_agent.run(
