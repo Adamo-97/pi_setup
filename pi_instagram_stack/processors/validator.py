@@ -13,6 +13,7 @@ import uuid
 from typing import Any, Dict, Optional
 
 from processors.base import BaseProcessor
+from config.settings import settings
 from config.prompts.validator_prompts import (
     VALIDATOR_REVIEW_PROMPT,
     VALIDATOR_SYSTEM_PROMPT,
@@ -32,6 +33,7 @@ class Validator(BaseProcessor):
 
     def __init__(self):
         super().__init__(name="Validator (Instagram)")
+        self._task_model = settings.gemini.model_validator
 
     def run(
         self,
@@ -75,6 +77,7 @@ class Validator(BaseProcessor):
             raw = self.gemini.generate_json(
                 prompt=prompt,
                 system_prompt=VALIDATOR_SYSTEM_PROMPT,
+                model_override=self._task_model,
             )
             validation = raw if isinstance(raw, dict) else json.loads(raw)
         except (json.JSONDecodeError, Exception) as e:

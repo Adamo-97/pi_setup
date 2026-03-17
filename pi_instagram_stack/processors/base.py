@@ -27,6 +27,7 @@ class BaseProcessor(ABC):
         self.name = name
         self.gemini = GeminiService()
         self.rag = RAGManager()
+        self._task_model = None  # subclasses set via settings.gemini.model_*
         logger.info("Processor initialized: %s", self.name)
 
     # ================================================================

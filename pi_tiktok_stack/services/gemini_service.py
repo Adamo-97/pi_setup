@@ -45,9 +45,11 @@ class GeminiService:
         system_prompt: Optional[str] = None,
         temperature: Optional[float] = None,
         max_retries: int = 5,
+        model_override: Optional[str] = None,
     ) -> str:
         """Generate text using Gemini REST API."""
         temp = temperature if temperature is not None else self._temperature
+        model = model_override or self._model
 
         contents = []
         if system_prompt:
@@ -65,7 +67,7 @@ class GeminiService:
             },
         }
 
-        url = f"{_BASE}/models/{self._model}:generateContent?key={self._api_key}"
+        url = f"{_BASE}/models/{model}:generateContent?key={self._api_key}"
 
         for attempt in range(max_retries + 1):
             try:
@@ -113,6 +115,7 @@ class GeminiService:
         system_prompt: Optional[str] = None,
         temperature: Optional[float] = None,
         max_retries: int = 5,
+        model_override: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Generate and parse JSON from Gemini."""
         raw = self.generate_text(
@@ -120,6 +123,7 @@ class GeminiService:
             system_prompt=system_prompt,
             temperature=temperature if temperature is not None else 0.3,
             max_retries=max_retries,
+            model_override=model_override,
         )
 
         # Strip markdown code fences if present

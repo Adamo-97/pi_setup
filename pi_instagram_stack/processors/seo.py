@@ -19,6 +19,7 @@ import uuid
 from typing import Optional
 
 from processors.base import BaseProcessor
+from config.settings import settings
 from config.prompts.seo_prompts import SEO_SYSTEM_PROMPT, get_seo_prompt
 
 logger = logging.getLogger("instagram.seo_agent")
@@ -42,6 +43,7 @@ class SEO(BaseProcessor):
 
     def __init__(self):
         super().__init__(name="SEO Processor (Instagram)")
+        self._task_model = settings.gemini.model_writer
 
     def run(
         self,
@@ -84,6 +86,7 @@ class SEO(BaseProcessor):
         raw = self.gemini.generate_json(
             prompt=prompt,
             system_prompt=SEO_SYSTEM_PROMPT,
+            model_override=self._task_model,
         )
 
         # Sanitise / provide defaults for any missing keys

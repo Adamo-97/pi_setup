@@ -12,6 +12,7 @@ import logging
 from typing import Any, Dict, List, Optional
 
 from processors.base import BaseProcessor
+from config.settings import settings
 from config.prompts.clip_prompts import CLIP_SYSTEM_PROMPT, CLIP_SELECTION_PROMPT
 
 logger = logging.getLogger("instagram.clip_agent")
@@ -22,6 +23,7 @@ class ClipSelector(BaseProcessor):
 
     def __init__(self):
         super().__init__(name="ClipSelector (Instagram)")
+        self._task_model = settings.gemini.model_scraper
 
     def run(
         self,
@@ -63,6 +65,7 @@ class ClipSelector(BaseProcessor):
             raw = self.gemini.generate_json(
                 prompt=prompt,
                 system_prompt=CLIP_SYSTEM_PROMPT,
+                model_override=self._task_model,
             )
             result = raw if isinstance(raw, dict) else json.loads(raw)
         except (json.JSONDecodeError, Exception) as e:
@@ -104,7 +107,7 @@ class ClipSelector(BaseProcessor):
         )
 
         try:
-            raw = self.gemini.generate_json(prompt=prompt)
+            raw = self.gemini.generate_json(prompt=prompt, model_override=self._task_model)
             titles = raw if isinstance(raw, list) else json.loads(raw) if isinstance(raw, str) else []
             if isinstance(titles, list):
                 return [str(t) for t in titles if t]

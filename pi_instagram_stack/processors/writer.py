@@ -13,6 +13,7 @@ import uuid
 from typing import Any, Dict, List, Optional
 
 from processors.base import BaseProcessor
+from config.settings import settings
 from config.prompts.writer_prompts import WRITER_PROMPTS, WRITER_SYSTEM_PROMPT
 from database.connection import execute_query
 
@@ -24,6 +25,7 @@ class Writer(BaseProcessor):
 
     def __init__(self):
         super().__init__(name="Writer (Instagram)")
+        self._task_model = settings.gemini.model_writer
 
     def run(
         self,
@@ -103,6 +105,7 @@ class Writer(BaseProcessor):
                 raw = self.gemini.generate_text(
                     prompt=prompt,
                     system_prompt=WRITER_SYSTEM_PROMPT,
+                    model_override=self._task_model,
                 )
                 script_text = self.clean_script(raw)
 

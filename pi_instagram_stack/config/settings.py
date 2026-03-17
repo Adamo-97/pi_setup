@@ -27,6 +27,10 @@ load_dotenv(PROJECT_ROOT / ".env")
 class GeminiConfig:
     api_key: str = ""
     model: str = "gemini-2.5-pro"
+    model_planner: str = "gemini-2.5-flash-thinking"
+    model_scraper: str = "gemini-2.5-flash"
+    model_validator: str = "gemini-2.5-flash"
+    model_writer: str = "gemini-3.1-pro-preview"
     embedding_model: str = "models/embedding-001"
     temperature: float = 0.8
     max_output_tokens: int = 4096
@@ -250,6 +254,10 @@ class _Settings:
         self.gemini = GeminiConfig(
             api_key=e("GEMINI_API_KEY", ""),
             model=e("GEMINI_MODEL", "gemini-2.5-pro"),
+            model_planner=e("GEMINI_MODEL_PLANNER", "gemini-2.5-flash-thinking"),
+            model_scraper=e("GEMINI_MODEL_SCRAPER", "gemini-2.5-flash"),
+            model_validator=e("GEMINI_MODEL_VALIDATOR", "gemini-2.5-flash"),
+            model_writer=e("GEMINI_MODEL_WRITER", "gemini-3.1-pro-preview"),
             embedding_model=e("GEMINI_EMBEDDING_MODEL", "models/embedding-001"),
             temperature=float(e("GEMINI_TEMPERATURE", "0.8")),
             max_output_tokens=int(e("GEMINI_MAX_TOKENS", "4096")),

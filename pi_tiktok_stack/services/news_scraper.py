@@ -30,6 +30,7 @@ class NewsScraper:
         self._cfg = settings.news
         self._rawg_key = getattr(settings, "rawg", None) and settings.rawg.api_key or ""
         self._gemini = GeminiService()
+        self._scraper_model = settings.gemini.model_scraper
 
     # ================================================================
     # RAWG.io — Game Database
@@ -498,7 +499,7 @@ class NewsScraper:
             "gaming news articles for this topic. Return ONLY a JSON array of strings."
         )
         try:
-            raw = self._gemini.generate_text(prompt, max_retries=1)
+            raw = self._gemini.generate_text(prompt, max_retries=1, model_override=self._scraper_model)
             parsed = json.loads(raw.strip().strip("`").removeprefix("json"))
             if isinstance(parsed, list) and parsed:
                 return [str(q) for q in parsed[:3]]
@@ -518,7 +519,7 @@ class NewsScraper:
             "Drop irrelevant articles. JSON only."
         )
         try:
-            raw = self._gemini.generate_text(prompt, max_retries=1)
+            raw = self._gemini.generate_text(prompt, max_retries=1, model_override=self._scraper_model)
             parsed = json.loads(raw.strip().strip("`").removeprefix("json"))
             if not isinstance(parsed, list):
                 return articles[:5]

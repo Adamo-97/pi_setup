@@ -26,6 +26,7 @@ import psycopg2
 import psycopg2.extras
 
 from processors.base import BaseProcessor
+from config.settings import settings
 from services.redis_rate_limiter import RedisRateLimiter, BudgetExhaustedError
 from services.budget_reader import BudgetReader
 from config.prompts.planner_prompts import PLANNER_SYSTEM_PROMPT, get_planner_prompt
@@ -42,6 +43,7 @@ class Planner(BaseProcessor):
 
     def __init__(self):
         super().__init__(name="Planner Processor (TikTok)")
+        self._task_model = settings.gemini.model_planner
         self._shared_rawg_config = {
             "host": os.getenv("SHARED_RAWG_HOST", "192.168.1.100"),
             "port": int(os.getenv("SHARED_RAWG_PORT", "5433")),
@@ -101,6 +103,7 @@ class Planner(BaseProcessor):
         response = self.gemini.generate_text(
             prompt=prompt,
             system_prompt=PLANNER_SYSTEM_PROMPT,
+            model_override=self._task_model,
         )
 
         # 6. Parse response
