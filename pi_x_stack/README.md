@@ -1,257 +1,201 @@
 # pi_x_stack
 
-Fully automated X/Twitter gaming video pipeline running on a Raspberry Pi 5. Generates provocative, debate-provoking Arabic gaming content — scrapes news, writes scripts with tweet captions, validates quality, generates voiceover, downloads footage, assembles vertical videos, and publishes via Buffer.
+Automated X/Twitter Arabic gaming content pipeline on Raspberry Pi 5. Generates provocative, debate-provoking Arabic gaming content — scrapes news, writes scripts, validates quality, generates voiceover, and publishes via Buffer's GraphQL API.
 
 ## Architecture
-
-### C4 Context Diagram
 
 ```mermaid
 C4Context
     title System Context — pi_x_stack
 
-    Person(user, "Content Creator", "Reviews & approves videos via Mattermost")
-
-    System(x_stack, "pi_x_stack", "Automated X/Twitter gaming video pipeline on Raspberry Pi 5")
-
+    Person(user, "Content Creator", "Reviews & approves via Mattermost")
+    System(x_stack, "pi_x_stack", "Automated X/Twitter pipeline on Raspberry Pi 5")
     System_Ext(gemini, "Google Gemini", "AI text/JSON generation & embeddings")
     System_Ext(elevenlabs, "ElevenLabs", "Arabic TTS with word-level timestamps")
-    System_Ext(youtube, "YouTube", "Gameplay/trailer footage source")
-    System_Ext(buffer, "Buffer", "X/Twitter video publishing")
-    System_Ext(mattermost, "Mattermost", "Human-in-the-loop approval notifications")
+    System_Ext(buffer, "Buffer GraphQL", "X/Twitter publishing via api.buffer.com/graphql")
+    System_Ext(mattermost, "Mattermost", "5-gate HITL approval with interactive dialogs")
     System_Ext(news, "News Sources", "RSS feeds, Google News, Reddit")
 
-    Rel(user, mattermost, "Approves/rejects videos")
+    Rel(user, mattermost, "Approves/rejects, uploads video, picks schedule")
     Rel(x_stack, gemini, "Generates scripts & embeddings")
     Rel(x_stack, elevenlabs, "Generates Arabic voiceover")
-    Rel(x_stack, youtube, "Downloads footage via yt-dlp")
-    Rel(x_stack, buffer, "Publishes videos to X/Twitter")
+    Rel(x_stack, buffer, "Publishes to X/Twitter")
     Rel(x_stack, mattermost, "Sends approval requests")
     Rel(x_stack, news, "Scrapes gaming news")
-    Rel(mattermost, x_stack, "Webhook callbacks (approve/reject)")
+    Rel(mattermost, x_stack, "Webhook callbacks (approve/reject/dialog)")
 ```
 
-### C4 Container Diagram
-
-```mermaid
-C4Container
-    title Container Diagram — pi_x_stack
-
-    Person(user, "Content Creator")
-
-    System_Boundary(pi, "Raspberry Pi 5") {
-        Container(n8n, "n8n", "Workflow Engine", "Orchestrates 6-gate HITL pipeline, port 5681")
-        Container(postgres, "PostgreSQL 16", "Database", "pgvector, RAG store, port 5436")
-        Container(redis, "Redis", "Cache", "Rate limiting + budget cache, port 6382")
-        Container(pipeline, "Python Pipeline", "8 Steps", "Scrape → Write → Validate → Voice → Footage → Assemble → Publish → RAG")
-        Container(agents, "AI Agents", "Python", "PlannerAgent, WriterAgent, ValidatorAgent, ClipAgent")
-        Container(services, "Services", "Python", "Gemini, ElevenLabs, News, Video, Subtitles, Buffer, Mattermost, RateLimiter, BudgetReader")
-    }
-
-    Rel(user, n8n, "Manual trigger / Mattermost approval")
-    Rel(n8n, pipeline, "Executes pipeline steps")
-    Rel(pipeline, agents, "Script generation & validation")
-    Rel(pipeline, services, "External API calls")
-    Rel(agents, postgres, "RAG context & storage")
-    Rel(services, postgres, "Data persistence")
-```
-
-## Stack Coexistence
-
-All four stacks run independently on the same Raspberry Pi 5:
-
-| Stack              | PostgreSQL | n8n      | Redis    | Network             | Database      |
-| ------------------ | ---------- | -------- | -------- | ------------------- | ------------- |
-| pi_youtube_stack   | 5433       | 5678     | 6379     | youtube_stack_net   | youtube_rag   |
-| pi_tiktok_stack    | 5434       | 5679     | 6380     | tiktok_stack_net    | tiktok_rag    |
-| pi_instagram_stack | 5435       | 5680     | 6381     | instagram_stack_net | instagram_rag |
-| **pi_x_stack**     | **5436**   | **5681** | **6382** | **x_stack_net**     | **x_rag**     |
-
-## Pipeline Steps (6-Gate Human-in-the-Loop)
-
-Every phase requires **explicit human approval** via Mattermost before proceeding. Nothing proceeds past any gate without your click.
+## Pipeline Flow (5-Gate Human-in-the-Loop)
 
 ```mermaid
 flowchart TD
-    START([🕐 Daily 11AM / Manual]) --> BUDGET[📊 Load budgets.json]
-    BUDGET --> PLAN[🧠 X Planner — RAWG + Breaking News]
+    START([🕐 Daily 2PM / Manual]) --> PLAN[🧠 Planner — RAWG + Breaking News]
 
-    PLAN --> GATE0{🔔 Gate 0 — Plan Review}
-    GATE0 -- ✅ Approve --> SCRAPE[📰 Scrape News]
-    GATE0 -- ❌ Reject --> R0[Reject + RAG]
+    PLAN --> GATE0{0️⃣ Gate 0 — Plan}
+    GATE0 -- ✅ --> SCRAPE[📰 Scrape News]
+    GATE0 -- ❌ --> R0[Reject]
 
-    SCRAPE --> GATE1{🔔 Gate 1 — Data Review}
-    GATE1 -- ✅ Approve --> SCRIPT[✍️ Writer Agent — X Thread Script]
-    GATE1 -- ❌ Reject --> R1[Reject]
+    SCRAPE --> GATE1{1️⃣ Gate 1 — News}
+    GATE1 -- ✅ --> SCRIPT[✍️ Writer — X Script]
+    GATE1 -- ❌ --> R1[Reject]
 
-    SCRIPT --> VALIDATE[🔍 Validator Agent]
-    VALIDATE --> GATE2{🔔 Gate 2 — Script Review}
-    GATE2 -- ✅ Approve --> VOICE[🎙️ ElevenLabs TTS]
-    GATE2 -- ❌ Reject --> R2[Reject]
+    SCRIPT --> VALIDATE[🔍 Validator + Auto-Revise]
+    VALIDATE --> GATE2{2️⃣ Gate 2 — Script}
+    GATE2 -- ✅ --> VOICE[🎙️ ElevenLabs TTS]
+    GATE2 -- ❌ --> R2[Reject]
+    GATE2 -- 💬 Comment --> REWRITE[Rewrite Loop]
 
-    VOICE --> GATE3{🔔 Gate 3 — Audio Review}
-    GATE3 -- ✅ Approve --> FOOTAGE[📹 Download + Assemble]
-    GATE3 -- ❌ Reject --> R3[Reject]
+    VOICE --> GATE3{3️⃣ Gate 3 — Voiceover}
+    GATE3 -- ✅ --> SEO[📊 SEO — Caption + Hashtags]
+    GATE3 -- ❌ --> R3[Reject]
 
-    FOOTAGE --> GATE4{🔔 Gate 4 — Video Review}
-    GATE4 -- ✅ Approve --> PUBLISH{🔔 Gate 5 — Final Publish + 📎 Thumbnail Upload}
-    GATE4 -- ❌ Reject --> R4[Reject]
+    SEO --> GATE4{4️⃣ Gate 4 — Publish}
+    GATE4 -- 🚀 Approve --> DIALOG[📅 Schedule Dialog]
+    GATE4 -- ❌ --> R4[Reject]
 
-    PUBLISH -- ✅ + 🖼️ Thumbnail --> BUFFER[📤 Buffer → X]
+    DIALOG --> BUFFER[📤 Buffer GraphQL → X]
     BUFFER --> RAG[🧠 Update RAG]
-    PUBLISH -- ❌ --> R5[Reject]
-
-    SCRIPT -.-> REDIS[🔴 Redis Rate Limiter]
-    VOICE -.-> REDIS
-    FOOTAGE -.-> REDIS
-    PLAN -.-> REDIS
 
     style GATE0 fill:#2196F3,color:#fff
     style GATE1 fill:#2196F3,color:#fff
     style GATE2 fill:#2196F3,color:#fff
     style GATE3 fill:#2196F3,color:#fff
-    style GATE4 fill:#2196F3,color:#fff
-    style PUBLISH fill:#FF9800,color:#fff
-    style REDIS fill:#f44336,color:#fff
+    style GATE4 fill:#FF9800,color:#fff
+    style DIALOG fill:#4CAF50,color:#fff
 ```
 
-### Approval Gates Summary
+### Gate 4 — Publish Flow
 
-| Gate       | Phase   | What You Review                                                  |
-| ---------- | ------- | ---------------------------------------------------------------- |
-| **Gate 0** | Plan    | Planner Agent's content plan (game, hot take angle)              |
-| **Gate 1** | Data    | Scraped news articles (relevance, controversy level)             |
-| **Gate 2** | Script  | AI-generated Arabic script + tweet caption + validation scores   |
-| **Gate 3** | Audio   | ElevenLabs voiceover + word timestamps                           |
-| **Gate 4** | Video   | Assembled 9:16 video with subtitles                              |
-| **Gate 5** | Publish | Final review + **manual thumbnail upload** via Mattermost thread |
+1. Pipeline generates SEO caption (Arabic + English), hashtags, and best post time
+2. Gate 4 message shows all SEO data in #x-publish
+3. You reply with video + thumbnail attachments
+4. Click "🚀 موافقة ونشر" → scheduling dialog opens
+5. Pick date/time (YYYY-MM-DD HH:MM KSA) or "publish now"
+6. Pipeline fetches your uploaded files, pushes to Buffer with schedule
+
+### Approval Gates
+
+| Gate | Channel | What You Review |
+|------|---------|-----------------|
+| 0️⃣ | #x-plan | Content plan (game, hot take angle) |
+| 1️⃣ | #x-news | Scraped news articles |
+| 2️⃣ | #x-script | Arabic script + validation scores |
+| 3️⃣ | #x-voiceover | ElevenLabs voiceover audio |
+| 4️⃣ | #x-publish | SEO caption + hashtags → upload video → schedule |
+
+## Pipeline Steps
+
+| Step | File | Description |
+|------|------|-------------|
+| 1 | `step1_scrape_news.py` | Scrape RSS/Google/Reddit |
+| 2 | `step2_generate_script.py` | Generate Arabic X script |
+| 3 | `step3_validate_script.py` | AI quality gate + auto-revision |
+| 4 | `step4_generate_voiceover.py` | ElevenLabs TTS + timestamps |
+| 5 | `step5_publish_x.py` | Generate SEO caption + hashtags |
+| 5b | `step5b_buffer_draft.py` | Push to Buffer (text/video/scheduled) |
+| 6 | `step6_update_rag.py` | Update RAG memory |
 
 ## Content Types
 
-| Type                 | Description                   | Example                          |
-| -------------------- | ----------------------------- | -------------------------------- |
-| `trending_news`      | Breaking gaming/hardware news | "PS6 leaked specs"               |
-| `game_spotlight`     | Deep-dive on a specific game  | "Why Elden Ring changed RPGs"    |
-| `controversial_take` | Provocative industry debate   | "Mobile gaming > console gaming" |
-| `trailer_reaction`   | New trailer analysis          | "GTA VI trailer breakdown"       |
+| Type | Description |
+|------|-------------|
+| `trending_news` | Breaking gaming/hardware news |
+| `game_spotlight` | Deep-dive on a specific game |
+| `controversial_take` | Provocative industry debate (X-specific) |
+| `trailer_reaction` | New trailer analysis |
 
-## X-Specific Features
+## Stack Coexistence
 
-- **Tweet Caption**: Auto-generated `<280` char Arabic tweet text via `[تغريدة]` marker
-- **x_fit Validation**: Scores provocative, debate-provoking X-native style
-- **Controversial Take**: Unique content type for hot takes and unpopular opinions
-- **Tone**: مباشر، حاد، يثير النقاش (direct, sharp, debate-provoking)
-- **Controversy-focused subreddits**: gamingcirclejerk, truegaming, PatientGamers
+| Stack | PostgreSQL | Redis | n8n Webhook | Database |
+|-------|-----------|-------|-------------|----------|
+| pi_tiktok_stack | 5434 | 6380 | tiktok-manual | tiktok_rag |
+| pi_instagram_stack | 5435 | 6381 | instagram-manual | instagram_rag |
+| **pi_x_stack** | **5436** | **6382** | **x-manual** | **x_rag** |
+
+All stacks share the single n8n instance on port 5678 (host network).
+
+## Docker Services
+
+| Container | Image | Port | Purpose |
+|-----------|-------|------|---------|
+| `postgres_x` | `pgvector/pgvector:pg16` | 5436 | Database + vector embeddings |
+| `redis_x` | `redis:7-alpine` | 6382 | Rate limiting + budget cache |
+
+## Gemini Model Routing
+
+| Task | Model |
+|------|-------|
+| Planner | gemini-2.5-flash |
+| Scraper | gemini-2.5-flash |
+| Validator | gemini-2.5-flash |
+| Writer + SEO | gemini-3.1-pro-preview |
+
+## Buffer Integration
+
+Uses Buffer GraphQL API (`https://api.buffer.com/graphql`):
+- Channel: `67ab8b48cc7f0c250ca6c853` (twitter, @TVV_Arabic)
+- Supports: text drafts, video posts with thumbnail, custom scheduling
+- X allows text-only posts (unlike TikTok/Instagram which require video)
 
 ## Quick Start
 
 ```bash
-# 1. Clone & setup
-git clone https://github.com/Adamo-97/pi_setup.git
-cd pi_setup/pi_x_stack
-chmod +x setup.sh && ./setup.sh
-
-# 2. Configure API keys
-nano .env
-
-# 3. Start Docker services
+cd ~/pi_setup/pi_x_stack
 docker compose up -d
-
-# 4. Import n8n workflow
-# Open http://<pi-ip>:5681 → Import n8n_workflow.json
-
-# 5. Test pipeline
-source venv/bin/activate
-python -m pipeline.step1_scrape_news
+# Trigger: POST http://192.168.0.11:5678/webhook/x-manual
 ```
+
+## Schedule
+
+- **Automatic**: Daily at 2:00 PM via n8n (workflow `CnwyI8DuWp33iveC`)
+- **Manual**: `curl -X POST http://192.168.0.11:5678/webhook/x-manual`
+
+## n8n Webhooks
+
+| Path | Purpose |
+|------|---------|
+| `x-manual` | Manual pipeline trigger |
+| `x-approve` | Gate approval callback |
+| `x-reject` | Gate rejection callback |
+| `x-comment` | Comment button → dialog |
+| `x-publish-dialog` | Publish approve → scheduling dialog |
+| `x-publish-submit` | Dialog submit → fetch files → Buffer |
+| `x-dialog-submit` | Comment dialog submit |
+| `x-retry-script` | Retry failed script generation |
 
 ## Project Structure
 
 ```
 pi_x_stack/
 ├── config/
-│   ├── settings.py              # Central config + RedisConfig, BudgetConfig, SharedRAWGConfig
-│   ├── budgets.json             # Per-platform weekly budget quotas
+│   ├── settings.py
 │   └── prompts/
-│       ├── writer_prompts.py    # Arabic script generation prompts
-│       └── validator_prompts.py # 7-criteria validation prompts
 ├── database/
-│   ├── init.sql                 # PostgreSQL schema + pgvector
-│   ├── connection.py            # Connection pool
-│   ├── models.py                # Pydantic data models
-│   └── rag_manager.py           # RAG embedding store
+│   ├── init.sql
+│   ├── connection.py
+│   └── rag_manager.py
 ├── services/
-│   ├── gemini_service.py        # Google Gemini API
-│   ├── elevenlabs_service.py    # ElevenLabs TTS
-│   ├── embedding_service.py     # Text embedding helpers
-│   ├── news_scraper.py          # RSS/Google/Reddit scraper
-│   ├── video_downloader.py      # yt-dlp + local footage
-│   ├── subtitle_service.py      # ASS karaoke subtitles
-│   ├── video_assembler.py       # FFmpeg video assembly
-│   ├── mattermost_service.py    # 6-gate HITL approval messages via Mattermost
-│   └── buffer_service.py        # Buffer X/Twitter publishing
-│   ├── redis_rate_limiter.py    # Redis-backed budget enforcement (7-day TTL)
-│   └── budget_reader.py         # Loads budgets.json from Nextcloud/Redis/local
-├── agents/
-│   ├── base_agent.py            # Abstract agent base class
-│   ├── planner_agent.py         # Content planner — RAWG cache + breaking news (Gate 0)
-│   ├── writer_agent.py          # AI script writer
-│   ├── validator_agent.py       # AI quality validator
-│   └── clip_agent.py            # AI footage selector
+│   ├── gemini_service.py
+│   ├── news_scraper.py
+│   ├── mattermost_service.py    # 5-gate HITL + publish dialog
+│   └── buffer_service.py        # Buffer GraphQL API
+├── processors/
+│   ├── planner.py, writer.py, validator.py, clip.py, seo.py
 ├── pipeline/
 │   ├── step1_scrape_news.py
 │   ├── step2_generate_script.py
 │   ├── step3_validate_script.py
 │   ├── step4_generate_voiceover.py
-│   ├── step5_download_footage.py
-│   ├── step6_assemble_video.py
-│   ├── step7_publish_x.py
-│   └── step8_update_rag.py
-├── footage/                     # Local footage library
-├── n8n_workflow.json            # n8n workflow (import to port 5681)
-├── docker-compose.yml           # PostgreSQL + n8n
-├── requirements.txt
-├── setup.sh
-├── .env.example
-└── .gitignore
+│   ├── step5_publish_x.py          # SEO generation
+│   ├── step5b_buffer_draft.py      # Buffer push
+│   ├── step6_update_rag.py
+│   ├── gate_helper.py
+│   ├── open_publish_dialog.py      # Mattermost scheduling dialog
+│   └── handle_publish_submit.py    # Dialog submit → Buffer
+├── docker-compose.yml
+├── n8n_workflow.json
+└── .env
 ```
-
-## Video Specs
-
-| Property   | Value                              |
-| ---------- | ---------------------------------- |
-| Resolution | 1080 × 1920 (vertical 9:16)        |
-| Frame Rate | 30 fps                             |
-| Duration   | 30–60 seconds                      |
-| Codec      | H.264 (libx264)                    |
-| Audio      | AAC, 44100 Hz                      |
-| Subtitles  | ASS word-by-word karaoke highlight |
-
-## Environment Variables
-
-See [.env.example](.env.example) for all required keys:
-
-- `GEMINI_API_KEY` — Google Gemini API
-- `ELEVENLABS_API_KEY` — ElevenLabs TTS
-- `ELEVENLABS_VOICE_ID` — Arabic voice ID
-- `SERPAPI_KEY` — Google News scraping
-- `BUFFER_ACCESS_TOKEN` — Buffer publishing
-- `BUFFER_PROFILE_ID` — X/Twitter Buffer profile
-- `MATTERMOST_URL` — Self-hosted Mattermost server URL
-- `MATTERMOST_BOT_TOKEN` — Personal Access Token for bot-x
-- `MATTERMOST_CHANNEL_ID` — Channel ID for #pipeline-x
-- `REDIS_URL` — Redis connection (redis://redis_x:6382/0)
-- `NEXTCLOUD_URL` — Nextcloud WebDAV base URL
-- `NEXTCLOUD_USER` / `NEXTCLOUD_PASSWORD` — Nextcloud credentials
-- `SHARED_RAWG_HOST` / `SHARED_RAWG_PORT` — Shared RAWG database for planner
-- `POSTGRES_*` — Database configuration
-
-## Schedule
-
-- **Automatic**: Daily at 11:00 AM via n8n schedule trigger
-- **Manual**: POST to `http://<pi-ip>:5681/webhook/x-manual`
-- **Approve**: POST to `http://<pi-ip>:5681/webhook/x-approve?gate=N&run_id=...&action=approve`
-- **Reject**: POST to `http://<pi-ip>:5681/webhook/x-reject?gate=N&run_id=...&action=reject`
 
 ## License
 
