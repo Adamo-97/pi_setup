@@ -1,11 +1,11 @@
 # -*- coding: utf-8 -*-
 """
-Planner Agent — X (Twitter)
-==============================
-Platform-specific content planner for X/Twitter short-form videos.
+Planner Processor — X
+===========================
+Platform-specific content planner for X.
 Reads shared RAWG PostgreSQL cache + local RAG context to propose
-content ideas tailored for 30-45 second Arabic gaming posts with
-hot-take angles and breaking-news hooks on X.
+content ideas tailored for 30-60 second Arabic gaming videos with
+high visual impact and aesthetic appeal.
 
 Workflow:
   1. Query trending/new games from shared RAWG cache (port 5433)
@@ -26,24 +26,24 @@ import psycopg2
 import psycopg2.extras
 
 from processors.base import BaseProcessor
+from config.settings import settings
 from services.redis_rate_limiter import RedisRateLimiter, BudgetExhaustedError
 from services.budget_reader import BudgetReader
 from config.prompts.planner_prompts import PLANNER_SYSTEM_PROMPT, get_planner_prompt
 
 logger = logging.getLogger(__name__)
 
-from config.prompts.planner_prompts import PLANNER_SYSTEM_PROMPT, get_planner_prompt
-
 
 class Planner(BaseProcessor):
     """
-    X/Twitter Content Planner — proposes short-form hot-take videos.
+    X Content Planner — proposes video ideas.
     """
 
     PLATFORM = "x"
 
     def __init__(self):
-        super().__init__(name="Planner (X)")
+        super().__init__(name="Planner Processor (X)")
+        self._task_model = settings.gemini.model_planner
         self._shared_rawg_config = {
             "host": os.getenv("SHARED_RAWG_HOST", "192.168.1.100"),
             "port": int(os.getenv("SHARED_RAWG_PORT", "5433")),
@@ -53,7 +53,7 @@ class Planner(BaseProcessor):
         }
 
     def run(self, **kwargs) -> dict:
-        """Generate a content plan for X/Twitter."""
+        """Generate a content plan for X."""
         plan_id = str(uuid.uuid4())
         logger.info("[%s] Starting plan generation: %s", self.name, plan_id[:8])
 
@@ -88,17 +88,22 @@ class Planner(BaseProcessor):
         # 4. Get covered topics
         covered_topics = self._get_covered_topics()
 
+        # 4b. Get recent scraped news
+        news_data = self._get_recent_news()
+
         # 5. Generate plan
         prompt = get_planner_prompt(
             trending_games=trending_games,
             covered_topics=covered_topics,
             remaining_budget=remaining,
             current_date=date.today().isoformat(),
+            news_data=news_data,
         )
 
-        response = self.gemini.generate(
+        response = self.gemini.generate_text(
+            prompt=prompt,
             system_prompt=PLANNER_SYSTEM_PROMPT,
-            user_prompt=prompt,
+            model_override=self._task_model,
         )
 
         # 6. Parse response
@@ -112,25 +117,30 @@ class Planner(BaseProcessor):
                 plan = json.loads(match.group(1))
             else:
                 plan = {
-                    "content_type": "breaking_news",
-                    "topic": "خبر عاجل — خطة احتياطية",
-                    "angle": "تغطية سريعة لآخر الأخبار",
-                    "opening_line": "ما حد يتكلم عن هالشي...",
+                    "content_type": "trending_news",
+                    "topic": "لقطات مميزة — خطة احتياطية",
+                    "angle": "أفضل لحظات الأسبوع",
+                    "visual_hook": "هذا المشهد غير حقيقي...",
                     "game_slugs": [],
-                    "estimated_duration_seconds": 35,
+                    "estimated_duration_seconds": 45,
                     "estimated_cost_units": 180,
                     "reasoning": "خطة احتياطية",
                 }
 
+        normalized_type = self._normalize_content_type(
+            plan.get("content_type", "trending_news")
+        )
+
         result = {
             "plan_id": plan_id,
             "platform": self.PLATFORM,
-            "proposed_content_type": plan.get("content_type", "breaking_news"),
+            "proposed_content_type": normalized_type,
+            "raw_content_type": plan.get("content_type", ""),
             "proposed_topic": plan.get("topic", ""),
             "proposed_angle": plan.get("angle", ""),
-            "opening_line": plan.get("opening_line", ""),
+            "visual_hook": plan.get("visual_hook", ""),
             "game_slugs": plan.get("game_slugs", []),
-            "estimated_duration_seconds": plan.get("estimated_duration_seconds", 35),
+            "estimated_duration_seconds": plan.get("estimated_duration_seconds", 45),
             "estimated_cost_units": plan.get("estimated_cost_units", 180),
             "reasoning": plan.get("reasoning", ""),
             "budget_remaining": remaining,
@@ -146,10 +156,25 @@ class Planner(BaseProcessor):
         )
         return result
 
+    @staticmethod
+    def _normalize_content_type(raw_type: str) -> str:
+        """Map planner labels into writer-supported content types."""
+        normalized = (raw_type or "").strip().lower()
+        aliases = {
+            "trending_news": "trending_news",
+            "game_spotlight": "game_spotlight",
+            "hardware_spotlight": "hardware_spotlight",
+            "trailer_reaction": "trailer_reaction",
+            "game_highlights": "trending_news",
+            "visual_showcase": "game_spotlight",
+            "tips_tricks": "trending_news",
+        }
+        return aliases.get(normalized, "trending_news")
+
     def _get_trending_games(self) -> str:
-        """Query shared RAWG cache for news-worthy games."""
+        """Query shared RAWG cache for visually impressive games."""
         try:
-            conn = psycopg2.connect(**self._shared_rawg_config)
+            conn = psycopg2.connect(**self._shared_rawg_config, connect_timeout=5)
             conn.set_client_encoding("UTF8")
             cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
             cur.execute(
@@ -157,10 +182,10 @@ class Planner(BaseProcessor):
                 SELECT title, slug, release_date, rating, metacritic,
                        platforms, genres, gamepass
                 FROM games
-                WHERE release_date >= CURRENT_DATE - INTERVAL '14 days'
+                WHERE release_date >= CURRENT_DATE - INTERVAL '30 days'
                    OR release_date > CURRENT_DATE
-                ORDER BY metacritic DESC NULLS LAST, rating DESC NULLS LAST
-                LIMIT 10
+                ORDER BY rating DESC NULLS LAST
+                LIMIT 15
             """
             )
             games = cur.fetchall()
@@ -174,7 +199,6 @@ class Planner(BaseProcessor):
             for g in games:
                 parts.append(
                     f"- {g['title']} ({g.get('release_date', '?')}) "
-                    f"| Metacritic: {g.get('metacritic', 'N/A')} "
                     f"| تقييم: {g.get('rating', 'N/A')}"
                 )
             return "\n".join(parts)
@@ -191,13 +215,42 @@ class Planner(BaseProcessor):
             recent = execute_query(
                 """SELECT content_type, created_at
                    FROM generated_scripts
-                   WHERE created_at >= CURRENT_DATE - INTERVAL '7 days'
+                   WHERE created_at >= CURRENT_DATE - INTERVAL '14 days'
                    ORDER BY created_at DESC LIMIT 10""",
                 fetch=True,
             )
             if not recent:
                 return "لا توجد مواضيع مغطاة."
-            return "\n".join(f"- [{r[0]}] ({r[1]})" for r in recent)
+            return "\n".join(f"- [{r['content_type']}] ({r['created_at']})" for r in recent)
         except Exception as exc:
             logger.warning("Covered topics query failed: %s", exc)
             return "خطأ في استرجاع المواضيع."
+
+    def _get_recent_news(self) -> str:
+        """Get recent unused news articles from local DB (scraped by Step 1)."""
+        try:
+            from database.connection import execute_query
+
+            articles = execute_query(
+                """SELECT source, title, summary
+                   FROM news_articles
+                   WHERE used = FALSE
+                     AND scraped_at >= NOW() - INTERVAL '48 hours'
+                   ORDER BY published_at DESC NULLS LAST
+                   LIMIT 10""",
+                fetch=True,
+            )
+            if not articles:
+                return "لا توجد أخبار حديثة."
+
+            parts = []
+            for i, a in enumerate(articles, 1):
+                summary = (a.get("summary") or "")[:200]
+                parts.append(
+                    f"{i}. [{a['source']}] {a['title']}\n"
+                    f"   {summary}"
+                )
+            return "\n\n".join(parts)
+        except Exception as exc:
+            logger.warning("Recent news query failed: %s", exc)
+            return "خطأ في استرجاع الأخبار."

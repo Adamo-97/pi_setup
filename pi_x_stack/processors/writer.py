@@ -1,19 +1,19 @@
 # -*- coding: utf-8 -*-
 """
-Writer Agent
+Writer Processor
 ============
-Generates X/Twitter video scripts in Arabic using Gemini.
+Generates Instagram Reels scripts in Arabic using Gemini.
 Uses news data + RAG context + previous feedback to produce
-provocative, debate-provoking scripts for 30-60 second vertical videos.
+aesthetic, hook-first scripts for 30-60 second vertical Reels.
 """
 
 import json
 import logging
-import re
 import uuid
 from typing import Any, Dict, List, Optional
 
 from processors.base import BaseProcessor
+from config.settings import settings
 from config.prompts.writer_prompts import WRITER_PROMPTS, WRITER_SYSTEM_PROMPT
 from database.connection import execute_query
 
@@ -21,10 +21,11 @@ logger = logging.getLogger("x.writer")
 
 
 class Writer(BaseProcessor):
-    """AI script writer for X/Twitter gaming content."""
+    """AI script writer for Instagram Reels gaming content."""
 
     def __init__(self):
-        super().__init__(name="X Video Writer")
+        super().__init__(name="Writer (X)")
+        self._task_model = settings.gemini.model_writer
 
     def run(
         self,
@@ -35,25 +36,35 @@ class Writer(BaseProcessor):
         **kwargs,
     ) -> Dict[str, Any]:
         """
-        Generate an X/Twitter video script with tweet caption.
+        Generate an Instagram Reels script.
 
         Args:
-            content_type: trending_news | game_spotlight | controversial_take | trailer_reaction
+            content_type: trending_news | game_spotlight | hardware_spotlight | trailer_reaction
             news_articles: List of news article dicts
             target_duration: Target video duration in seconds
             max_retries: Number of retry attempts
 
         Returns:
-            dict with script_id, script_text, tweet_text, word_count,
-                  estimated_duration, news_ids, content_type
+            dict with script_id, script_text, word_count, estimated_duration,
+                  news_ids, content_type
         """
         logger.info(
             "Generating %s script (target: %.0fs)", content_type, target_duration
         )
 
         # Prepare context
+        planned_topic = (kwargs.get("planned_topic") or "").strip()
+        planned_angle = (kwargs.get("planned_angle") or "").strip()
+        planned_visual_hook = (kwargs.get("planned_visual_hook") or "").strip()
+
         news_data = self._format_news(news_articles or [])
         news_ids = [str(a.get("id", "")) for a in (news_articles or []) if a.get("id")]
+
+        if planned_topic and news_data.startswith("No specific news articles"):
+            news_data = (
+                "No specific matched articles were found in DB for this run. "
+                f"Stick to the approved plan topic exactly: {planned_topic}"
+            )
 
         rag_context = self.get_rag_context(
             query=news_data[:500] if news_data else content_type,
@@ -61,6 +72,9 @@ class Writer(BaseProcessor):
         )
         feedback = self.get_previous_feedback(content_type)
         target_words = self.target_word_count(target_duration)
+
+        # Check for revision feedback (from validator loop)
+        revision_feedback = kwargs.get("revision_feedback", "")
 
         # Get prompt template
         prompt_template = WRITER_PROMPTS.get(
@@ -72,21 +86,37 @@ class Writer(BaseProcessor):
             previous_feedback=feedback,
             target_duration=int(target_duration),
             word_count=target_words,
+            planned_topic=planned_topic,
+            planned_angle=planned_angle,
+            planned_visual_hook=planned_visual_hook,
         )
+
+        # Append revision feedback if this is a revision run
+        if revision_feedback:
+            prompt += (
+                "\n\n## ملاحظات المراجع (يجب تطبيقها):\n"
+                f"{revision_feedback}\n"
+            )
 
         # Generate with retries
         script_text = None
-        tweet_text = None
         for attempt in range(max_retries + 1):
             try:
                 raw = self.gemini.generate_text(
                     prompt=prompt,
-                    system_instruction=WRITER_SYSTEM_PROMPT,
+                    system_prompt=WRITER_SYSTEM_PROMPT,
+                    model_override=self._task_model,
                 )
-                cleaned = self.clean_script(raw)
+                script_text = self.clean_script(raw)
 
-                # Extract tweet caption after [تغريدة] marker
-                script_text, tweet_text = self._extract_tweet(cleaned)
+                # Check script ends with complete sentence
+                if script_text and not script_text.rstrip().endswith(('.', '؟', '!', '.')):
+                    logger.warning(
+                        "Attempt %d: Script appears truncated (no ending punctuation), retrying",
+                        attempt + 1,
+                    )
+                    prompt += "\n\nCRITICAL: Your previous output was cut off mid-sentence. Make sure the script ends with a COMPLETE sentence and a period."
+                    continue
 
                 # Validate length
                 word_count = self.count_words(script_text)
@@ -126,7 +156,6 @@ class Writer(BaseProcessor):
         # Store in database
         script_id = self._store_script(
             script_text=script_text,
-            tweet_text=tweet_text,
             content_type=content_type,
             news_ids=news_ids,
             trigger_source=kwargs.get("trigger_source", "auto"),
@@ -142,7 +171,6 @@ class Writer(BaseProcessor):
         result = {
             "script_id": script_id,
             "script_text": script_text,
-            "tweet_text": tweet_text,
             "word_count": word_count,
             "estimated_duration": round(est_duration, 1),
             "target_duration": target_duration,
@@ -163,21 +191,6 @@ class Writer(BaseProcessor):
     # ================================================================
 
     @staticmethod
-    def _extract_tweet(text: str) -> tuple:
-        """
-        Split script text and tweet caption at [تغريدة] marker.
-        Returns (script_text, tweet_text).
-        """
-        marker = "[تغريدة]"
-        if marker in text:
-            parts = text.split(marker, 1)
-            script_text = parts[0].strip()
-            tweet_text = parts[1].strip()[:280]
-            return script_text, tweet_text
-        # Fallback: no marker found — no tweet
-        return text.strip(), None
-
-    @staticmethod
     def _format_news(articles: List[Dict[str, Any]]) -> str:
         """Format news articles for the prompt."""
         if not articles:
@@ -194,7 +207,6 @@ class Writer(BaseProcessor):
     @staticmethod
     def _store_script(
         script_text: str,
-        tweet_text: Optional[str],
         content_type: str,
         news_ids: List[str],
         trigger_source: str = "auto",
@@ -208,17 +220,10 @@ class Writer(BaseProcessor):
         execute_query(
             """
             INSERT INTO generated_scripts
-                (id, content_type, script_text, tweet_text, news_ids, status, trigger_source)
-            VALUES (%s, %s, %s, %s, %s, 'draft', %s)
+                (id, content_type, script_text, news_ids, status, trigger_source)
+            VALUES (%s, %s, %s, %s, 'draft', %s)
             """,
-            (
-                script_id,
-                content_type,
-                script_text,
-                tweet_text,
-                news_ids_array,
-                trigger_source,
-            ),
+            (script_id, content_type, script_text, news_ids_array, trigger_source),
         )
 
         return script_id

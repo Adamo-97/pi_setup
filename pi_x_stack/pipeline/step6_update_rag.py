@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Step 8: Update RAG
+Step 6: Update RAG
 ==================
 Stores completed pipeline artifacts into the RAG system for future
 context. Records feedback and updates embeddings.
 
 Usage:
-    python -m pipeline.step8_update_rag --video-id <UUID> [--feedback <text>]
+    python -m pipeline.step6_update_rag --video-id <UUID> [--feedback <text>]
 """
 
 import argparse
@@ -45,7 +45,7 @@ def main(
     Returns:
         dict with rag update status
     """
-    logger.info("=== Step 8: Update RAG (%s) ===", video_id[:8])
+    logger.info("=== Step 6: Update RAG (%s) ===", video_id[:8])
 
     rag = RAGManager()
 
@@ -197,9 +197,7 @@ def _generate_auto_feedback(
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(
-        description="Update RAG system for X/Twitter pipeline"
-    )
+    parser = argparse.ArgumentParser(description="Update RAG system")
     parser.add_argument("--video-id", required=True, help="Video UUID")
     parser.add_argument("--feedback", default="", help="Optional feedback text")
     parser.add_argument(

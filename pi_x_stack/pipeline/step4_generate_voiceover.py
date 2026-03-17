@@ -132,9 +132,7 @@ def main(script_id: str) -> dict:
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(
-        description="Generate voiceover for X/Twitter video"
-    )
+    parser = argparse.ArgumentParser(description="Generate voiceover")
     parser.add_argument("--script-id", required=True, help="Approved script UUID")
     args = parser.parse_args()
     main(script_id=args.script_id)

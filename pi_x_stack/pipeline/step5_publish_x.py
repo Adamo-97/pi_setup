@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Step 5: Generate Publish Package (TikTok)
+Step 5: Generate Publish Package (X)
 ==========================================
 Generates SEO-optimised caption + hashtags via Gemini, then outputs
 JSON for the n8n workflow to post to the #tiktok-publish channel.
@@ -21,7 +21,7 @@ from processors.seo import SEO
 from services.buffer_service import BufferService
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(name)s] %(levelname)s: %(message)s")
-logger = logging.getLogger("tiktok.publish")
+logger = logging.getLogger("x.publish")
 
 
 def main(script_id: str) -> dict:

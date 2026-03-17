@@ -8,28 +8,30 @@ version: "3.8"
 # =============================================================
 
 services:
-  # ---------------------------------------------------------
-  # PostgreSQL 16 with pgvector (RAG embeddings)
-  # ---------------------------------------------------------
   postgres_x:
     image: pgvector/pgvector:pg16
     container_name: postgres_x
     restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-x_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-x_secure_pass_2025}
+      POSTGRES_DB: ${POSTGRES_DB:-x_rag}
     ports:
       - "5436:5432"
-    environment:
-      POSTGRES_DB: x_rag
-      POSTGRES_USER: x_user
-      POSTGRES_PASSWORD: x_secure_pass_2025
     volumes:
       - pgdata_x:/var/lib/postgresql/data
       - ./database/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
-    networks:
-      - x_stack_net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U x_user -d x_rag"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
     deploy:
       resources:
         limits:
           memory: 512M
+    networks:
+      - x_stack_net
 
   redis_x:
     image: redis:7-alpine

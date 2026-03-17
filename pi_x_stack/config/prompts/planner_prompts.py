@@ -10,6 +10,7 @@ def get_planner_prompt(
     covered_topics: str,
     remaining_budget: int,
     current_date: str,
+    news_data: str = "",
 ) -> str:
     return skill(
         "planner", section="user",
@@ -17,4 +18,5 @@ def get_planner_prompt(
         covered_topics=covered_topics,
         remaining_budget=remaining_budget,
         current_date=current_date,
+        news_data=news_data,
     )

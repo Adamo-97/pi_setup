@@ -27,6 +27,10 @@ load_dotenv(PROJECT_ROOT / ".env")
 class GeminiConfig:
     api_key: str = ""
     model: str = "gemini-2.5-pro"
+    model_planner: str = "gemini-2.5-flash-thinking"
+    model_scraper: str = "gemini-2.5-flash"
+    model_validator: str = "gemini-2.5-flash"
+    model_writer: str = "gemini-3.1-pro-preview"
     embedding_model: str = "models/embedding-001"
     temperature: float = 0.8
     max_output_tokens: int = 4096
@@ -37,7 +41,7 @@ class ElevenLabsConfig:
     api_key: str = ""
     voice_id: str = ""
     model: str = "eleven_multilingual_v2"
-    output_format: str = "pcm_44100"
+    output_format: str = "mp3_44100_128"
     sample_rate: int = 44100
 
 
@@ -56,7 +60,23 @@ class DatabaseConfig:
 class MattermostConfig:
     url: str = ""
     bot_token: str = ""
-    channel_id: str = ""
+    channel_id: str = ""  # legacy fallback
+    channel_plan: str = ""
+    channel_news: str = ""
+    channel_script: str = ""
+    channel_voiceover: str = ""
+    channel_publish: str = ""
+
+    def channel_for_gate(self, gate: int) -> str:
+        """Return the Mattermost channel ID for a given gate number."""
+        gate_map = {
+            0: self.channel_plan,
+            1: self.channel_news,
+            2: self.channel_script,
+            3: self.channel_voiceover,
+            4: self.channel_publish,
+        }
+        return gate_map.get(gate, self.channel_id) or self.channel_id
 
 
 @dataclass(frozen=True)
@@ -93,25 +113,32 @@ class SharedRAWGConfig:
 
 
 @dataclass(frozen=True)
+class RAWGConfig:
+    api_key: str = ""
+    base_url: str = "https://api.rawg.io/api"
+    page_size: int = 10
+
+
+@dataclass(frozen=True)
 class N8NConfig:
     webhook_base: str = "http://localhost:5681/webhook"
 
 
 @dataclass(frozen=True)
 class NewsConfig:
-    # RSS feeds — gaming + controversy-generating sources
+    # RSS feeds — gaming + opinion/editorial
     rss_feeds: tuple = (
         "https://www.ign.com/articles.rss",
         "https://kotaku.com/rss",
         "https://www.pcgamer.com/rss/",
         "https://www.gamespot.com/feeds/mashup/",
         "https://www.eurogamer.net/feed",
-        "https://www.theverge.com/games/rss/index.xml",
+        "https://www.theverge.com/rss/index.xml",
     )
     # SerpApi (Google News)
     serpapi_key: str = ""
     serpapi_engine: str = "google_news"
-    # Reddit — gaming + controversy/debate subreddits
+    # Reddit — opinion/discussion subreddits
     reddit_subreddits: tuple = (
         "gaming",
         "Games",
@@ -130,20 +157,20 @@ class NewsConfig:
 class VideoConfig:
     # yt-dlp
     yt_dlp_format: str = (
-        "bestvideo[height<=1080][ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]"
+        "bestvideo[height<=720][ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]"
     )
     max_download_duration: int = 600  # 10 min max trailer length
     # Local fallback
     local_footage_dir: str = "footage"
-    # Assembly
-    output_width: int = 1080
-    output_height: int = 1920
+    # Assembly — X/Twitter uses 16:9 at 720p
+    output_width: int = 1280
+    output_height: int = 720
     fps: int = 30
-    target_duration_min: int = 30
-    target_duration_max: int = 60
+    target_duration_min: int = 15
+    target_duration_max: int = 45
     # Subtitles
     subtitle_font: str = "Arial"
-    subtitle_font_size: int = 64
+    subtitle_font_size: int = 48
     subtitle_highlight_color: str = "#FFD700"  # Gold
     subtitle_normal_color: str = "#FFFFFF"  # White
     subtitle_bg_color: str = "#00000099"  # Semi-transparent black
@@ -164,7 +191,7 @@ class ContentTypeConfig:
     name: str = ""
     schedule_type: str = "daily"  # daily | event | manual
     description: str = ""
-    target_duration: int = 45  # seconds
+    target_duration: int = 30  # seconds
 
 
 # ---------------------------------------------------------------------------
@@ -174,26 +201,26 @@ CONTENT_TYPES: Dict[str, ContentTypeConfig] = {
     "trending_news": ContentTypeConfig(
         name="trending_news",
         schedule_type="daily",
-        description="Fast-paced trending gaming news roundup with hot takes",
-        target_duration=45,
+        description="Fast-paced trending gaming news roundup for X",
+        target_duration=30,
     ),
     "game_spotlight": ContentTypeConfig(
         name="game_spotlight",
         schedule_type="event",
-        description="Deep spotlight on a single hot game",
-        target_duration=60,
+        description="Quick spotlight on a single hot game",
+        target_duration=40,
     ),
     "controversial_take": ContentTypeConfig(
         name="controversial_take",
         schedule_type="event",
-        description="Provocative industry debate or unpopular gaming opinion",
-        target_duration=50,
+        description="Spicy opinion or hot take on a gaming controversy",
+        target_duration=35,
     ),
     "trailer_reaction": ContentTypeConfig(
         name="trailer_reaction",
         schedule_type="event",
         description="AI commentary over a game trailer with clips",
-        target_duration=55,
+        target_duration=40,
     ),
 }
 
@@ -225,6 +252,10 @@ class _Settings:
         self.gemini = GeminiConfig(
             api_key=e("GEMINI_API_KEY", ""),
             model=e("GEMINI_MODEL", "gemini-2.5-pro"),
+            model_planner=e("GEMINI_MODEL_PLANNER", "gemini-2.5-flash-thinking"),
+            model_scraper=e("GEMINI_MODEL_SCRAPER", "gemini-2.5-flash"),
+            model_validator=e("GEMINI_MODEL_VALIDATOR", "gemini-2.5-flash"),
+            model_writer=e("GEMINI_MODEL_WRITER", "gemini-3.1-pro-preview"),
             embedding_model=e("GEMINI_EMBEDDING_MODEL", "models/embedding-001"),
             temperature=float(e("GEMINI_TEMPERATURE", "0.8")),
             max_output_tokens=int(e("GEMINI_MAX_TOKENS", "4096")),
@@ -233,6 +264,8 @@ class _Settings:
             api_key=e("ELEVENLABS_API_KEY", ""),
             voice_id=e("ELEVENLABS_VOICE_ID", ""),
             model=e("ELEVENLABS_MODEL", "eleven_multilingual_v2"),
+            output_format=e("ELEVENLABS_OUTPUT_FORMAT", "mp3_44100_128"),
+            sample_rate=int(e("ELEVENLABS_SAMPLE_RATE", "44100")),
         )
         self.database = DatabaseConfig(
             host=e("DB_HOST", "localhost"),
@@ -245,6 +278,11 @@ class _Settings:
             url=e("MATTERMOST_URL", ""),
             bot_token=e("MATTERMOST_BOT_TOKEN", ""),
             channel_id=e("MATTERMOST_CHANNEL_ID", ""),
+            channel_plan=e("MATTERMOST_CHANNEL_PLAN_ID", ""),
+            channel_news=e("MATTERMOST_CHANNEL_NEWS_ID", ""),
+            channel_script=e("MATTERMOST_CHANNEL_SCRIPT_ID", ""),
+            channel_voiceover=e("MATTERMOST_CHANNEL_VOICEOVER_ID", ""),
+            channel_publish=e("MATTERMOST_CHANNEL_PUBLISH_ID", ""),
         )
         self.buffer = BufferConfig(
             access_token=e("BUFFER_ACCESS_TOKEN", ""),
@@ -255,6 +293,9 @@ class _Settings:
         )
         self.news = NewsConfig(
             serpapi_key=e("SERPAPI_KEY", ""),
+        )
+        self.rawg = RAWGConfig(
+            api_key=e("RAWG_API_KEY", ""),
         )
         self.video = VideoConfig()
         self.paths = PathsConfig()

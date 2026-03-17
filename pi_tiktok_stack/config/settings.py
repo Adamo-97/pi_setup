@@ -65,8 +65,6 @@ class MattermostConfig:
     channel_news: str = ""
     channel_script: str = ""
     channel_voiceover: str = ""
-    channel_footage: str = ""
-    channel_video: str = ""
     channel_publish: str = ""
 
     def channel_for_gate(self, gate: int) -> str:
@@ -284,8 +282,6 @@ class _Settings:
             channel_news=e("MATTERMOST_CHANNEL_NEWS_ID", ""),
             channel_script=e("MATTERMOST_CHANNEL_SCRIPT_ID", ""),
             channel_voiceover=e("MATTERMOST_CHANNEL_VOICEOVER_ID", ""),
-            channel_footage=e("MATTERMOST_CHANNEL_FOOTAGE_ID", ""),
-            channel_video=e("MATTERMOST_CHANNEL_VIDEO_ID", ""),
             channel_publish=e("MATTERMOST_CHANNEL_PUBLISH_ID", ""),
         )
         self.buffer = BufferConfig(

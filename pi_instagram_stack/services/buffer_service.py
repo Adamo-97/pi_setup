@@ -1,34 +1,94 @@
 # -*- coding: utf-8 -*-
 """
-Buffer Service
-==============
-Publishes Instagram Reels via Buffer API.
-Handles video upload, update creation, and status checking.
+Buffer Service (GraphQL API)
+============================
+Publishes content via Buffer's GraphQL API (api.buffer.com/graphql).
+Supports text drafts, video posts with captions, and queue management.
 """
 
 import logging
 import time
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 import requests
 
-logger = logging.getLogger("instagram.buffer")
+logger = logging.getLogger(__name__)
+
+GRAPHQL_URL = "https://api.buffer.com/graphql"
 
 
 class BufferService:
-    """Buffer API client for Instagram Reels auto-publishing."""
-
-    API_BASE = "https://api.bufferapp.com/1"
+    """Buffer GraphQL API client for pipeline auto-publishing."""
 
     def __init__(self, access_token: str, profile_id: str):
         self.access_token = access_token
-        self.profile_id = profile_id
+        self.channel_id = profile_id  # Buffer calls them channels now
         self.session = requests.Session()
-        self.session.params = {"access_token": self.access_token}
+        self.session.headers.update({
+            "Authorization": f"Bearer {self.access_token}",
+            "Content-Type": "application/json",
+        })
 
     # ================================================================
-    # Publish video
+    # GraphQL helper
+    # ================================================================
+
+    def _gql(self, query: str, variables: Optional[dict] = None) -> dict:
+        """Execute a GraphQL query/mutation."""
+        payload = {"query": query}
+        if variables:
+            payload["variables"] = variables
+        resp = self.session.post(GRAPHQL_URL, json=payload, timeout=30)
+        resp.raise_for_status()
+        data = resp.json()
+        if data.get("errors"):
+            msg = data["errors"][0].get("message", "Unknown GraphQL error")
+            raise RuntimeError(f"Buffer GraphQL error: {msg}")
+        return data.get("data", {})
+
+    # ================================================================
+    # Create draft (text-only, video attached manually in Buffer UI)
+    # ================================================================
+
+    def create_draft(self, caption: str, hashtags: str = "") -> Dict[str, Any]:
+        """Create a text-only draft in Buffer queue."""
+        text = caption.strip()
+        if hashtags:
+            text += "\n\n" + hashtags.strip()
+
+        query = """
+        mutation CreateDraft($input: CreatePostInput!) {
+          createPost(input: $input) {
+            ... on PostActionSuccess { post { id text status } }
+            ... on InvalidInputError { message }
+            ... on UnexpectedError { message }
+          }
+        }
+        """
+        variables = {
+            "input": {
+                "channelId": self.channel_id,
+                "text": text,
+                "schedulingType": "automatic",
+                "mode": "addToQueue",
+                "saveToDraft": True,
+            }
+        }
+        try:
+            data = self._gql(query, variables)
+            result = data.get("createPost", {})
+            post = result.get("post")
+            if post:
+                logger.info("Buffer draft created: %s", post["id"])
+                return {"success": True, "update_id": post["id"], "message": "Draft created"}
+            return {"success": False, "update_id": None, "message": result.get("message", "Unknown error")}
+        except Exception as e:
+            logger.error("Buffer draft creation failed: %s", e)
+            return {"success": False, "update_id": None, "message": str(e)}
+
+    # ================================================================
+    # Publish video (with caption)
     # ================================================================
 
     def publish_video(
@@ -37,191 +97,84 @@ class BufferService:
         caption: str,
         hashtags: Optional[str] = None,
         schedule_at: Optional[str] = None,
+        thumbnail_url: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
-        Publish a Reel to Instagram via Buffer.
+        Publish a video post to the channel via Buffer.
 
-        Args:
-            video_path: Path to the rendered .mp4 file.
-            caption: Arabic caption text for Instagram Reel.
-            hashtags: Space-separated hashtag string (e.g. "#gaming #reels").
-            schedule_at: ISO 8601 schedule time, or None for next slot.
-
-        Returns:
-            dict with success, update_id, message
+        The video must be uploaded to a public URL first (Buffer fetches it).
+        For local files, this creates a draft — attach video in Buffer UI.
         """
         video_file = Path(video_path)
-        if not video_file.is_file():
-            raise FileNotFoundError(f"Video not found: {video_path}")
-
-        file_size_mb = video_file.stat().st_size / (1024 * 1024)
-        if file_size_mb > 500:
-            raise ValueError(f"Video too large: {file_size_mb:.1f}MB (max 500MB)")
-
-        # Build caption with hashtags
-        full_text = caption
+        text = caption.strip()
         if hashtags:
-            full_text = f"{caption}\n\n{hashtags}"
+            text += "\n\n" + hashtags.strip()
 
-        # Buffer API: create update with media
-        url = f"{self.API_BASE}/updates/create.json"
+        # Buffer GraphQL needs a public video URL — local files become drafts
+        if video_file.is_file() and not video_path.startswith("http"):
+            logger.warning("Local video file — creating draft (attach video in Buffer UI)")
+            return self.create_draft(caption=text)
 
-        data = {
-            "profile_ids[]": self.profile_id,
-            "text": full_text,
-            "now": "false" if schedule_at else "true",
+        query = """
+        mutation PublishVideo($input: CreatePostInput!) {
+          createPost(input: $input) {
+            ... on PostActionSuccess { post { id text status } }
+            ... on InvalidInputError { message }
+            ... on UnexpectedError { message }
+            ... on LimitReachedError { message }
+          }
         }
+        """
+        mode = "customScheduled" if schedule_at else "addToQueue"
+        video_asset = {"url": video_path}
+        if thumbnail_url:
+            video_asset["thumbnailUrl"] = thumbnail_url
 
+        variables = {
+            "input": {
+                "channelId": self.channel_id,
+                "text": text,
+                "schedulingType": "automatic",
+                "mode": mode,
+                "assets": {"videos": [video_asset]},
+            }
+        }
         if schedule_at:
-            data["scheduled_at"] = schedule_at
-
-        # Upload video as media attachment
-        try:
-            with open(video_path, "rb") as vf:
-                files = {"media[video]": (video_file.name, vf, "video/mp4")}
-                resp = self.session.post(url, data=data, files=files, timeout=120)
-
-            resp_data = resp.json()
-
-            if resp.status_code == 200 and resp_data.get("success"):
-                update_id = resp_data.get("buffer_url", "")
-                updates = resp_data.get("updates", [])
-                if updates:
-                    update_id = updates[0].get("id", update_id)
-
-                logger.info("Buffer publish success: %s", update_id)
-                return {
-                    "success": True,
-                    "update_id": update_id,
-                    "message": "Video queued for Instagram Reels publishing",
-                    "response": resp_data,
-                }
-            else:
-                error_msg = resp_data.get("message", resp.text[:500])
-                logger.error("Buffer publish failed: %s", error_msg)
-                return {
-                    "success": False,
-                    "update_id": None,
-                    "message": error_msg,
-                    "response": resp_data,
-                }
-
-        except requests.Timeout:
-            logger.error("Buffer upload timed out for %s", video_path)
-            return {
-                "success": False,
-                "update_id": None,
-                "message": "Upload timed out (120s)",
-            }
-        except Exception as e:
-            logger.error("Buffer publish error: %s", e)
-            return {
-                "success": False,
-                "update_id": None,
-                "message": str(e),
-            }
-
-    # ================================================================
-    # Create draft (text-only, no video)
-    # ================================================================
-
-    def create_draft(
-        self,
-        caption: str,
-        hashtags: Optional[str] = None,
-    ) -> Dict[str, Any]:
-        """
-        Create a text-only draft in Buffer for manual video attachment.
-
-        Args:
-            caption: Arabic caption text.
-            hashtags: Space-separated hashtag string.
-
-        Returns:
-            dict with success, update_id, message
-        """
-        full_text = caption
-        if hashtags:
-            full_text = f"{caption}\n\n{hashtags}"
-
-        url = f"{self.API_BASE}/updates/create.json"
-        data = {
-            "profile_ids[]": self.profile_id,
-            "text": full_text,
-            "now": "false",
-        }
+            variables["input"]["dueAt"] = schedule_at
 
         try:
-            resp = self.session.post(url, data=data, timeout=30)
-            resp_data = resp.json()
-
-            if resp.status_code == 200 and resp_data.get("success"):
-                updates = resp_data.get("updates", [])
-                update_id = updates[0].get("id", "") if updates else ""
-                logger.info("Buffer draft created: %s", update_id)
-                return {
-                    "success": True,
-                    "update_id": update_id,
-                    "message": "Draft queued in Buffer for video attachment",
-                }
-            else:
-                error_msg = resp_data.get("message", resp.text[:500])
-                logger.error("Buffer draft failed: %s", error_msg)
-                return {"success": False, "update_id": None, "message": error_msg}
-
+            data = self._gql(query, variables)
+            result = data.get("createPost", {})
+            post = result.get("post")
+            if post:
+                logger.info("Buffer video post created: %s (status: %s)", post["id"], post["status"])
+                return {"success": True, "update_id": post["id"], "message": f"Post {post['status']}"}
+            return {"success": False, "update_id": None, "message": result.get("message", "Unknown error")}
         except Exception as e:
-            logger.error("Buffer draft error: %s", e)
+            logger.error("Buffer publish failed: %s", e)
             return {"success": False, "update_id": None, "message": str(e)}
 
     # ================================================================
-    # Check update status
-    # ================================================================
-
-    def get_update_status(self, update_id: str) -> Dict[str, Any]:
-        """Check the status of a Buffer update."""
-        url = f"{self.API_BASE}/updates/{update_id}.json"
-        try:
-            resp = self.session.get(url, timeout=15)
-            data = resp.json()
-            return {
-                "status": data.get("status", "unknown"),
-                "sent_at": data.get("sent_at"),
-                "text": data.get("text", ""),
-                "statistics": data.get("statistics", {}),
-            }
-        except Exception as e:
-            logger.error("Buffer status check failed: %s", e)
-            return {"status": "error", "message": str(e)}
-
-    # ================================================================
-    # Check profile / quota
+    # Profile / channel info
     # ================================================================
 
     def get_profile_info(self) -> Dict[str, Any]:
-        """Get Buffer profile information and posting limits."""
-        url = f"{self.API_BASE}/profiles/{self.profile_id}.json"
+        """Get Buffer channel information."""
+        query = """
+        query GetChannel($input: ChannelInput!) {
+          channel(input: $input) { id name service type }
+        }
+        """
         try:
-            resp = self.session.get(url, timeout=15)
-            data = resp.json()
-            return {
-                "service": data.get("service", "unknown"),
-                "formatted_service": data.get("formatted_service", ""),
-                "counts": data.get("counts", {}),
-                "schedules": data.get("schedules", []),
-            }
+            data = self._gql(query, {"input": {"id": self.channel_id}})
+            return data.get("channel", {})
         except Exception as e:
             logger.error("Buffer profile info failed: %s", e)
             return {"error": str(e)}
 
     def get_pending_count(self) -> int:
-        """Get number of pending updates in the Buffer queue."""
-        url = f"{self.API_BASE}/profiles/{self.profile_id}/updates/pending.json"
-        try:
-            resp = self.session.get(url, params={"count": 1}, timeout=15)
-            data = resp.json()
-            return data.get("total", 0)
-        except Exception:
-            return -1
+        """Get number of pending posts (not directly available in GraphQL — returns -1)."""
+        return -1
 
     # ================================================================
     # Default hashtags
@@ -229,12 +182,13 @@ class BufferService:
 
     @staticmethod
     def get_default_hashtags(content_type: str) -> str:
-        """Get default Arabic gaming + Instagram hashtags by content type."""
-        base = "#قيمنق #ألعاب #gaming #gamer #reels #انستقرام #explore"
-        type_tags = {
-            "trending_news": "#أخبار_الألعاب #gaming_news #اخبار",
-            "game_spotlight": "#مراجعة #review #جيم",
-            "hardware_spotlight": "#هاردوير #hardware #تقنية #tech",
-            "trailer_reaction": "#تريلر #trailer #ردة_فعل #reaction",
+        """Return default hashtags for a content type."""
+        base = "#gaming #ألعاب #أخبار_الألعاب"
+        extras = {
+            "trending_news": "#أخبار #ترند #gaming_news",
+            "game_spotlight": "#مراجعة #review #spotlight",
+            "hardware_spotlight": "#هاردوير #GPU #تقنية",
+            "trailer_reaction": "#تريلر #trailer #reaction",
+            "controversial_take": "#رأي #hottake #debate",
         }
-        return f"{base} {type_tags.get(content_type, '')}"
+        return f"{base} {extras.get(content_type, '')}".strip()
