@@ -18,6 +18,7 @@ import requests
 
 from config.settings import settings
 from database.connection import execute_query
+from services.gemini_service import GeminiService
 
 logger = logging.getLogger("tiktok.scraper")
 
@@ -28,6 +29,7 @@ class NewsScraper:
     def __init__(self):
         self._cfg = settings.news
         self._rawg_key = getattr(settings, "rawg", None) and settings.rawg.api_key or ""
+        self._gemini = GeminiService()
 
     # ================================================================
     # RAWG.io — Game Database
@@ -359,30 +361,22 @@ class NewsScraper:
     # Aggregate + Store
     # ================================================================
 
-    def scrape_all(self, topic: str = "", game_slugs: Optional[List[str]] = None) -> List[Dict[str, Any]]:
-        """Scrape all sources and return combined, deduplicated articles.
-        
-        If topic is provided, Google News searches for that topic specifically
-        and RSS/Reddit results are filtered to only include relevant articles.
-        """
+    def scrape_all(self, topic: str = "", game_slugs: Optional[List[str]] = None, angle: str = "") -> List[Dict[str, Any]]:
+        """Scrape all sources using AI-generated queries, then rank and digest results."""
         game_slugs = [slug.strip() for slug in (game_slugs or []) if slug.strip()]
         strict_game_mode = bool(game_slugs)
-        base_query = " ".join(slug.replace("-", " ") for slug in game_slugs) if strict_game_mode else topic
-        google_query = f"{base_query} gaming" if base_query else "gaming hardware news"
+
+        queries = self._generate_search_queries(topic, angle, game_slugs)
+        logger.info("AI search queries: %s", queries)
+
         rss_articles = self.scrape_rss()
-        google_articles = self.scrape_google_news(query=google_query)
-        reddit_articles = self.scrape_reddit()
         rawg_articles = self.scrape_rawg(topic=topic, game_slugs=game_slugs)
 
-        if base_query:
-            keywords = self._topic_keywords(base_query)
-            rss_articles = self._filter_by_topic(rss_articles, keywords)
-            google_articles = self._filter_by_topic(google_articles, keywords)
-            reddit_articles = self._filter_by_topic(reddit_articles, keywords)
-
-            # In strict game mode, do not keep non-matching data.
-            if strict_game_mode:
-                rawg_articles = self._filter_by_topic(rawg_articles, keywords)
+        google_articles = []
+        reddit_articles = []
+        for q in queries:
+            google_articles.extend(self.scrape_google_news(query=q))
+            reddit_articles.extend(self.scrape_reddit())
 
         all_articles = rawg_articles + google_articles + rss_articles + reddit_articles
         deduplicated = self._deduplicate(all_articles)
@@ -390,8 +384,11 @@ class NewsScraper:
         if strict_game_mode:
             deduplicated = self._filter_by_game_slugs(deduplicated, game_slugs)
 
+        if deduplicated and topic:
+            deduplicated = self._rank_and_digest(deduplicated, topic, angle)
+
         logger.info(
-            "Total scraped: %d (RAWG=%d, Google=%d, RSS=%d, Reddit=%d, strict=%s) → %d after dedup",
+            "Total scraped: %d (RAWG=%d, Google=%d, RSS=%d, Reddit=%d, strict=%s) → %d after dedup+AI",
             len(all_articles),
             len(rawg_articles),
             len(google_articles),
@@ -484,6 +481,58 @@ class NewsScraper:
             (article_ids,),
             fetch=False,
         )
+
+    # ================================================================
+    # ================================================================
+    # AI-powered helpers
+    # ================================================================
+
+    def _generate_search_queries(self, topic: str, angle: str, game_slugs: List[str]) -> List[str]:
+        """Use Gemini to generate targeted search queries from the plan."""
+        if not topic:
+            return ["gaming hardware news"]
+        games = ", ".join(s.replace("-", " ") for s in game_slugs) if game_slugs else ""
+        prompt = (
+            f"Topic: {topic}\nAngle: {angle}\nGames: {games}\n\n"
+            "Generate 2-3 short English search queries to find the most relevant "
+            "gaming news articles for this topic. Return ONLY a JSON array of strings."
+        )
+        try:
+            raw = self._gemini.generate_text(prompt, max_retries=1)
+            parsed = json.loads(raw.strip().strip("`").removeprefix("json"))
+            if isinstance(parsed, list) and parsed:
+                return [str(q) for q in parsed[:3]]
+        except Exception as e:
+            logger.warning("AI query generation failed, using fallback: %s", e)
+        return [f"{topic} gaming news"]
+
+    def _rank_and_digest(self, articles: List[Dict[str, Any]], topic: str, angle: str) -> List[Dict[str, Any]]:
+        """Use Gemini to rank articles by relevance and rewrite summaries into clean context."""
+        briefs = []
+        for i, a in enumerate(articles[:15]):
+            briefs.append(f"{i}. [{a.get('source','')}] {a.get('title','')}: {(a.get('summary','') or '')[:200]}")
+        prompt = (
+            f"Topic: {topic}\nAngle: {angle}\n\nArticles:\n" + "\n".join(briefs) +
+            "\n\nReturn a JSON array of objects for the top 5 most relevant articles. "
+            "Each object: {\"index\": <original index>, \"summary\": \"<clean 1-2 sentence summary of key facts>\"}. "
+            "Drop irrelevant articles. JSON only."
+        )
+        try:
+            raw = self._gemini.generate_text(prompt, max_retries=1)
+            parsed = json.loads(raw.strip().strip("`").removeprefix("json"))
+            if not isinstance(parsed, list):
+                return articles[:5]
+            ranked = []
+            for item in parsed[:5]:
+                idx = item.get("index", 0)
+                if 0 <= idx < len(articles):
+                    a = dict(articles[idx])
+                    a["summary"] = item.get("summary", a.get("summary", ""))
+                    ranked.append(a)
+            return ranked if ranked else articles[:5]
+        except Exception as e:
+            logger.warning("AI ranking failed, returning raw top 5: %s", e)
+            return articles[:5]
 
     # ================================================================
     # Utilities

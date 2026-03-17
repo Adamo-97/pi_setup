@@ -62,7 +62,7 @@ def _parse_game_slugs(games: str) -> list[str]:
     return list(dict.fromkeys(normalized))
 
 
-def main(source: str = "all", topic: str = "", games: str = "") -> dict:
+def main(source: str = "all", topic: str = "", games: str = "", angle: str = "") -> dict:
     """
     Scrape news from specified sources.
 
@@ -98,7 +98,7 @@ def main(source: str = "all", topic: str = "", games: str = "") -> dict:
         elif source == "rawg":
             articles = scraper.scrape_rawg(topic=topic, game_slugs=game_slugs)
         else:
-            articles = scraper.scrape_all(topic=topic, game_slugs=game_slugs)
+            articles = scraper.scrape_all(topic=topic, game_slugs=game_slugs, angle=angle)
 
         # Store in database
         stored = scraper.store_articles(articles)
@@ -184,6 +184,7 @@ if __name__ == "__main__":
     parser.add_argument("--run-id", default=None, help="n8n run ID (ignored, for tracking)")
     parser.add_argument("--topic", default="", help="Focus scraping on this topic")
     parser.add_argument("--games", default="", help="Comma-separated planned game slugs")
+    parser.add_argument("--angle", default="", help="Planned content angle from planner")
     args = parser.parse_args()
-    result = main(source=args.source, topic=args.topic, games=args.games)
+    result = main(source=args.source, topic=args.topic, games=args.games, angle=args.angle)
     print(_json.dumps(result, ensure_ascii=False))
