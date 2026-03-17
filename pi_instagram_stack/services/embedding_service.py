@@ -24,7 +24,11 @@ def _get_gemini():
 
 def embed_text(text: str) -> List[float]:
     """Generate embedding for a text string."""
-    return _get_gemini().generate_embedding(text)
+    try:
+        return _get_gemini().generate_embedding(text)
+    except Exception as e:
+        logger.error("embed_text failed after all retries: %s", e)
+        return []
 
 
 def embed_query(text: str) -> List[float]:
@@ -39,4 +43,8 @@ def embed_document(text: str) -> List[float]:
 
 def embed_batch(texts: List[str]) -> List[List[float]]:
     """Generate embeddings for a batch of texts."""
-    return _get_gemini().generate_embeddings_batch(texts)
+    try:
+        return _get_gemini().generate_embeddings_batch(texts)
+    except Exception as e:
+        logger.error("embed_batch failed after all retries: %s", e)
+        return [[] for _ in texts]

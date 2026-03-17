@@ -592,6 +592,248 @@
         1396,
         1568
       ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const stdout = $input.first().json.stdout || '';\nconst lines = stdout.trim().split('\\n');\ntry {\n  const d = JSON.parse(lines[lines.length - 1]);\n  return [{ json: d }];\n} catch(e) {\n  return [{ json: { rewrite_triggered: false } }];\n}"
+      },
+      "id": "b85a1631-c24e-4729-bca0-9c5fced4538a",
+      "name": "Check Comment Result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        672,
+        2016
+      ]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": ""
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.rewrite_triggered }}",
+                    "rightValue": true,
+                    "operator": {
+                      "type": "boolean",
+                      "operation": "equals"
+                    }
+                  },
+                  {
+                    "leftValue": "={{ $json.approved }}",
+                    "rightValue": true,
+                    "operator": {
+                      "type": "boolean",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Rewrite Approved"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": ""
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.rewrite_triggered }}",
+                    "rightValue": true,
+                    "operator": {
+                      "type": "boolean",
+                      "operation": "equals"
+                    }
+                  },
+                  {
+                    "leftValue": "={{ $json.generation_failed }}",
+                    "rightValue": true,
+                    "operator": {
+                      "type": "boolean",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Generation Failed"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": ""
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.rewrite_triggered }}",
+                    "rightValue": false,
+                    "operator": {
+                      "type": "boolean",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Comment Stored"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "5dc924da-d423-4caf-9993-903ede7f40be",
+      "name": "Comment Result Router",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [
+        896,
+        2016
+      ]
+    },
+    {
+      "parameters": {
+        "command": "={{ (() => { const d = $json; const data = { Score: String(d.overall_score || 0) + '/100', Hook_Score: String(d.hook_score || 0) + '/100', Verified_Score: String(d.verified_score || 0) + '/100', script_body: (d.script_text || '').substring(0, 3000) }; return 'cd /home/node/instagram_stack && echo ' + JSON.stringify(JSON.stringify(data)) + ' > /tmp/gate_data.json && python -m pipeline.gate_helper --gate 2 --data-file /tmp/gate_data.json --run-id ' + (d.run_id || ''); })() }}"
+      },
+      "id": "8af30a6f-1160-4dd7-b56d-9b4ff78de4c8",
+      "name": "Comment Rewrite Gate 2",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [
+        1120,
+        1904
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "return [{ json: { status: 'comment_rewrite_failed', message: 'Generation failed - notification already sent.' } }];"
+      },
+      "id": "4497940e-adf7-4a87-95e9-35bd89d9c644",
+      "name": "Comment End: Failed",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1120,
+        2016
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "return [{ json: { status: 'comment_stored' } }];"
+      },
+      "id": "ae6c42d8-c11f-403d-b9b8-770c09607dad",
+      "name": "Comment End: Stored",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1120,
+        2128
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "GET",
+        "path": "instagram-retry-script",
+        "options": {}
+      },
+      "id": "d6582a58-7bdb-4e5b-aa21-3b6a9bf68e63",
+      "name": "Retry Script Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        2512
+      ],
+      "webhookId": "instagram-retry-script"
+    },
+    {
+      "parameters": {
+        "jsCode": "const input = $input.first().json;\nconst query = input.query || input.body || input;\nconst runId = query.run_id || '';\nif (!runId) throw new Error('Missing run_id in retry request');\nconst fs = require('fs');\nconst state = JSON.parse(fs.readFileSync('/tmp/pipeline_state_' + runId + '.json', 'utf8'));\nreturn [{ json: { run_id: runId, content_type: state.content_type || '', news_ids: state.news_ids || '', planned_topic: state.planned_topic || state.proposed_topic || '', planned_angle: state.planned_angle || state.proposed_angle || '', planned_visual_hook: state.planned_visual_hook || state.visual_hook || '' } }];"
+      },
+      "id": "e3e4e871-3f65-4675-b670-72c228a54a70",
+      "name": "Parse Retry Params",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        224,
+        2512
+      ]
+    },
+    {
+      "parameters": {
+        "command": "={{ 'cd /home/node/instagram_stack && python -m pipeline.step2_write_script --run-id ' + $json.run_id + ' --fresh | tee /tmp/step2_retry_out.txt && python3 -m pipeline.save_state ' + $json.run_id + ' /tmp/step2_retry_out.txt' }}"
+      },
+      "id": "22e745b6-4e0d-4680-935f-c8eabd7dcb0e",
+      "name": "Retry Write Script",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [
+        448,
+        2512
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const stdout = $input.first().json.stdout || '';\nconst lines = stdout.trim().split('\\n');\ntry {\n  const d = JSON.parse(lines[lines.length - 1]);\n  const result = { ...d, run_id: $('Parse Retry Params').first().json.run_id };\n  return [{ json: result }];\n} catch(e) { throw new Error('Parse retry script failed: ' + e.message); }"
+      },
+      "id": "1dcf90f1-c9fe-4468-a6b3-694a409bb1e5",
+      "name": "Parse Retry Script",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        672,
+        2512
+      ]
+    },
+    {
+      "parameters": {
+        "command": "={{ 'cd /home/node/instagram_stack && python -m pipeline.step3_validate_script --script-id ' + $json.script_id + ' --run-id ' + $json.run_id + ' | tee /tmp/step3_retry_out.txt && python3 -m pipeline.save_state ' + $json.run_id + ' /tmp/step3_retry_out.txt' }}"
+      },
+      "id": "234f8d8c-7f17-43e7-a9a6-235cac04cfe7",
+      "name": "Retry Validate Script",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [
+        896,
+        2512
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const stdout = $input.first().json.stdout || '';\nconst lines = stdout.trim().split('\\n');\ntry {\n  const d = JSON.parse(lines[lines.length - 1]);\n  const result = { ...d, run_id: $('Parse Retry Params').first().json.run_id };\n  return [{ json: result }];\n} catch(e) { throw new Error('Parse retry validation failed: ' + e.message); }"
+      },
+      "id": "5ed0b38e-ac9f-4ae3-b6cc-00875fcf7aae",
+      "name": "Parse Retry Validation",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1120,
+        2512
+      ]
+    },
+    {
+      "parameters": {
+        "command": "={{ (() => { const overall = ($json.overall_score || 0); const hook = (($json.scores || {}).hook_strength || $json.hook_score || 0); const verified = ($json.verified_score || (($json.scores || {}).accuracy || 0)); const scriptText = ($('Parse Retry Script').first().json.script_text || '').substring(0, 3000); const data = { Score: String(overall) + '/100', Hook_Score: String(hook) + '/100', Verified_Score: String(verified) + '/100', script_body: scriptText }; return 'cd /home/node/instagram_stack && echo ' + JSON.stringify(JSON.stringify(data)) + ' > /tmp/gate_data.json && python -m pipeline.gate_helper --gate 2 --data-file /tmp/gate_data.json --run-id ' + $json.run_id; })() }}"
+      },
+      "id": "ef1b23b4-c3cc-41e8-b994-f5999dc99da8",
+      "name": "Retry Gate 2",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [
+        1344,
+        2512
+      ]
     }
   ],
   "connections": {
@@ -908,6 +1150,119 @@
           }
         ]
       ]
+    },
+    "Handle Comment": {
+      "main": [
+        [
+          {
+            "node": "Check Comment Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Comment Result": {
+      "main": [
+        [
+          {
+            "node": "Comment Result Router",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Comment Result Router": {
+      "main": [
+        [
+          {
+            "node": "Comment Rewrite Gate 2",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Comment End: Failed",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Comment End: Stored",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Retry Script Webhook": {
+      "main": [
+        [
+          {
+            "node": "Parse Retry Params",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Retry Params": {
+      "main": [
+        [
+          {
+            "node": "Retry Write Script",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Retry Write Script": {
+      "main": [
+        [
+          {
+            "node": "Parse Retry Script",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Retry Script": {
+      "main": [
+        [
+          {
+            "node": "Retry Validate Script",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Retry Validate Script": {
+      "main": [
+        [
+          {
+            "node": "Parse Retry Validation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Retry Validation": {
+      "main": [
+        [
+          {
+            "node": "Retry Gate 2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     }
   },
   "settings": {
@@ -926,7 +1281,7 @@
   "versionId": "6bb6261e-24ce-4ca1-a77b-68e31ab34ff3",
   "activeVersionId": "6bb6261e-24ce-4ca1-a77b-68e31ab34ff3",
   "versionCounter": 63,
-  "triggerCount": 5,
+  "triggerCount": 6,
   "shared": [
     {
       "updatedAt": "2026-03-05T23:00:42.093Z",
@@ -1621,6 +1976,248 @@
           448,
           2016
         ]
+      },
+      {
+        "parameters": {
+          "jsCode": "const stdout = $input.first().json.stdout || '';\nconst lines = stdout.trim().split('\\n');\ntry {\n  const d = JSON.parse(lines[lines.length - 1]);\n  return [{ json: d }];\n} catch(e) {\n  return [{ json: { rewrite_triggered: false } }];\n}"
+        },
+        "id": "b85a1631-c24e-4729-bca0-9c5fced4538a",
+        "name": "Check Comment Result",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          672,
+          2016
+        ]
+      },
+      {
+        "parameters": {
+          "rules": {
+            "values": [
+              {
+                "conditions": {
+                  "options": {
+                    "caseSensitive": true,
+                    "leftValue": ""
+                  },
+                  "conditions": [
+                    {
+                      "leftValue": "={{ $json.rewrite_triggered }}",
+                      "rightValue": true,
+                      "operator": {
+                        "type": "boolean",
+                        "operation": "equals"
+                      }
+                    },
+                    {
+                      "leftValue": "={{ $json.approved }}",
+                      "rightValue": true,
+                      "operator": {
+                        "type": "boolean",
+                        "operation": "equals"
+                      }
+                    }
+                  ],
+                  "combinator": "and"
+                },
+                "renameOutput": true,
+                "outputKey": "Rewrite Approved"
+              },
+              {
+                "conditions": {
+                  "options": {
+                    "caseSensitive": true,
+                    "leftValue": ""
+                  },
+                  "conditions": [
+                    {
+                      "leftValue": "={{ $json.rewrite_triggered }}",
+                      "rightValue": true,
+                      "operator": {
+                        "type": "boolean",
+                        "operation": "equals"
+                      }
+                    },
+                    {
+                      "leftValue": "={{ $json.generation_failed }}",
+                      "rightValue": true,
+                      "operator": {
+                        "type": "boolean",
+                        "operation": "equals"
+                      }
+                    }
+                  ],
+                  "combinator": "and"
+                },
+                "renameOutput": true,
+                "outputKey": "Generation Failed"
+              },
+              {
+                "conditions": {
+                  "options": {
+                    "caseSensitive": true,
+                    "leftValue": ""
+                  },
+                  "conditions": [
+                    {
+                      "leftValue": "={{ $json.rewrite_triggered }}",
+                      "rightValue": false,
+                      "operator": {
+                        "type": "boolean",
+                        "operation": "equals"
+                      }
+                    }
+                  ],
+                  "combinator": "and"
+                },
+                "renameOutput": true,
+                "outputKey": "Comment Stored"
+              }
+            ]
+          },
+          "options": {}
+        },
+        "id": "5dc924da-d423-4caf-9993-903ede7f40be",
+        "name": "Comment Result Router",
+        "type": "n8n-nodes-base.switch",
+        "typeVersion": 3.2,
+        "position": [
+          896,
+          2016
+        ]
+      },
+      {
+        "parameters": {
+          "command": "={{ (() => { const d = $json; const data = { Score: String(d.overall_score || 0) + '/100', Hook_Score: String(d.hook_score || 0) + '/100', Verified_Score: String(d.verified_score || 0) + '/100', script_body: (d.script_text || '').substring(0, 3000) }; return 'cd /home/node/instagram_stack && echo ' + JSON.stringify(JSON.stringify(data)) + ' > /tmp/gate_data.json && python -m pipeline.gate_helper --gate 2 --data-file /tmp/gate_data.json --run-id ' + (d.run_id || ''); })() }}"
+        },
+        "id": "8af30a6f-1160-4dd7-b56d-9b4ff78de4c8",
+        "name": "Comment Rewrite Gate 2",
+        "type": "n8n-nodes-base.executeCommand",
+        "typeVersion": 1,
+        "position": [
+          1120,
+          1904
+        ]
+      },
+      {
+        "parameters": {
+          "jsCode": "return [{ json: { status: 'comment_rewrite_failed', message: 'Generation failed - notification already sent.' } }];"
+        },
+        "id": "4497940e-adf7-4a87-95e9-35bd89d9c644",
+        "name": "Comment End: Failed",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          1120,
+          2016
+        ]
+      },
+      {
+        "parameters": {
+          "jsCode": "return [{ json: { status: 'comment_stored' } }];"
+        },
+        "id": "ae6c42d8-c11f-403d-b9b8-770c09607dad",
+        "name": "Comment End: Stored",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          1120,
+          2128
+        ]
+      },
+      {
+        "parameters": {
+          "httpMethod": "GET",
+          "path": "instagram-retry-script",
+          "options": {}
+        },
+        "id": "d6582a58-7bdb-4e5b-aa21-3b6a9bf68e63",
+        "name": "Retry Script Webhook",
+        "type": "n8n-nodes-base.webhook",
+        "typeVersion": 2,
+        "position": [
+          0,
+          2512
+        ],
+        "webhookId": "instagram-retry-script"
+      },
+      {
+        "parameters": {
+          "jsCode": "const input = $input.first().json;\nconst query = input.query || input.body || input;\nconst runId = query.run_id || '';\nif (!runId) throw new Error('Missing run_id in retry request');\nconst fs = require('fs');\nconst state = JSON.parse(fs.readFileSync('/tmp/pipeline_state_' + runId + '.json', 'utf8'));\nreturn [{ json: { run_id: runId, content_type: state.content_type || '', news_ids: state.news_ids || '', planned_topic: state.planned_topic || state.proposed_topic || '', planned_angle: state.planned_angle || state.proposed_angle || '', planned_visual_hook: state.planned_visual_hook || state.visual_hook || '' } }];"
+        },
+        "id": "e3e4e871-3f65-4675-b670-72c228a54a70",
+        "name": "Parse Retry Params",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          224,
+          2512
+        ]
+      },
+      {
+        "parameters": {
+          "command": "={{ 'cd /home/node/instagram_stack && python -m pipeline.step2_write_script --run-id ' + $json.run_id + ' --fresh | tee /tmp/step2_retry_out.txt && python3 -m pipeline.save_state ' + $json.run_id + ' /tmp/step2_retry_out.txt' }}"
+        },
+        "id": "22e745b6-4e0d-4680-935f-c8eabd7dcb0e",
+        "name": "Retry Write Script",
+        "type": "n8n-nodes-base.executeCommand",
+        "typeVersion": 1,
+        "position": [
+          448,
+          2512
+        ]
+      },
+      {
+        "parameters": {
+          "jsCode": "const stdout = $input.first().json.stdout || '';\nconst lines = stdout.trim().split('\\n');\ntry {\n  const d = JSON.parse(lines[lines.length - 1]);\n  const result = { ...d, run_id: $('Parse Retry Params').first().json.run_id };\n  return [{ json: result }];\n} catch(e) { throw new Error('Parse retry script failed: ' + e.message); }"
+        },
+        "id": "1dcf90f1-c9fe-4468-a6b3-694a409bb1e5",
+        "name": "Parse Retry Script",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          672,
+          2512
+        ]
+      },
+      {
+        "parameters": {
+          "command": "={{ 'cd /home/node/instagram_stack && python -m pipeline.step3_validate_script --script-id ' + $json.script_id + ' --run-id ' + $json.run_id + ' | tee /tmp/step3_retry_out.txt && python3 -m pipeline.save_state ' + $json.run_id + ' /tmp/step3_retry_out.txt' }}"
+        },
+        "id": "234f8d8c-7f17-43e7-a9a6-235cac04cfe7",
+        "name": "Retry Validate Script",
+        "type": "n8n-nodes-base.executeCommand",
+        "typeVersion": 1,
+        "position": [
+          896,
+          2512
+        ]
+      },
+      {
+        "parameters": {
+          "jsCode": "const stdout = $input.first().json.stdout || '';\nconst lines = stdout.trim().split('\\n');\ntry {\n  const d = JSON.parse(lines[lines.length - 1]);\n  const result = { ...d, run_id: $('Parse Retry Params').first().json.run_id };\n  return [{ json: result }];\n} catch(e) { throw new Error('Parse retry validation failed: ' + e.message); }"
+        },
+        "id": "5ed0b38e-ac9f-4ae3-b6cc-00875fcf7aae",
+        "name": "Parse Retry Validation",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          1120,
+          2512
+        ]
+      },
+      {
+        "parameters": {
+          "command": "={{ (() => { const overall = ($json.overall_score || 0); const hook = (($json.scores || {}).hook_strength || $json.hook_score || 0); const verified = ($json.verified_score || (($json.scores || {}).accuracy || 0)); const scriptText = ($('Parse Retry Script').first().json.script_text || '').substring(0, 3000); const data = { Score: String(overall) + '/100', Hook_Score: String(hook) + '/100', Verified_Score: String(verified) + '/100', script_body: scriptText }; return 'cd /home/node/instagram_stack && echo ' + JSON.stringify(JSON.stringify(data)) + ' > /tmp/gate_data.json && python -m pipeline.gate_helper --gate 2 --data-file /tmp/gate_data.json --run-id ' + $json.run_id; })() }}"
+        },
+        "id": "ef1b23b4-c3cc-41e8-b994-f5999dc99da8",
+        "name": "Retry Gate 2",
+        "type": "n8n-nodes-base.executeCommand",
+        "typeVersion": 1,
+        "position": [
+          1344,
+          2512
+        ]
       }
     ],
     "connections": {
@@ -1957,6 +2554,119 @@
           [
             {
               "node": "Handle Comment",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Handle Comment": {
+        "main": [
+          [
+            {
+              "node": "Check Comment Result",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Check Comment Result": {
+        "main": [
+          [
+            {
+              "node": "Comment Result Router",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Comment Result Router": {
+        "main": [
+          [
+            {
+              "node": "Comment Rewrite Gate 2",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Comment End: Failed",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Comment End: Stored",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Retry Script Webhook": {
+        "main": [
+          [
+            {
+              "node": "Parse Retry Params",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Parse Retry Params": {
+        "main": [
+          [
+            {
+              "node": "Retry Write Script",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Retry Write Script": {
+        "main": [
+          [
+            {
+              "node": "Parse Retry Script",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Parse Retry Script": {
+        "main": [
+          [
+            {
+              "node": "Retry Validate Script",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Retry Validate Script": {
+        "main": [
+          [
+            {
+              "node": "Parse Retry Validation",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Parse Retry Validation": {
+        "main": [
+          [
+            {
+              "node": "Retry Gate 2",
               "type": "main",
               "index": 0
             }

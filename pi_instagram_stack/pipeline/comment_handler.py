@@ -117,6 +117,125 @@ def main(run_id: str, gate: int, comment: str, feedback_type: str = "comment") -
         "video_id": video_id,
     }
 
+    # Gate 2 (script): trigger writer→validator revision loop with comment as feedback
+    if gate == 2 and script_id is not None:
+        try:
+            from processors.writer import Writer
+            from processors.validator import Validator
+
+            rows = execute_query(
+                "SELECT script_text, content_type, news_ids FROM generated_scripts WHERE id = %s",
+                (script_id,),
+                fetch=True,
+            )
+            if rows:
+                row = rows[0]
+                news_articles = []
+                if row["news_ids"]:
+                    try:
+                        news_rows = execute_query(
+                            "SELECT id, title, summary, source, source_url FROM news_articles WHERE id = ANY(%s)",
+                            (row["news_ids"],),
+                            fetch=True,
+                        )
+                        news_articles = [
+                            {"id": str(r.get("id", "")), "title": r.get("title", ""),
+                             "summary": r.get("summary", ""), "source": r.get("source", ""),
+                             "source_url": r.get("source_url", "")}
+                            for r in (news_rows or [])
+                        ]
+                    except Exception:
+                        pass
+
+                state = {}
+                try:
+                    state_file = Path(f"/tmp/pipeline_state_{run_id}.json")
+                    if state_file.is_file():
+                        state = json.loads(state_file.read_text())
+                except Exception:
+                    pass
+
+                # --- Budget check before revision loop ---
+                from services.redis_rate_limiter import RedisRateLimiter
+                from services.budget_reader import BudgetReader
+
+                limiter = RedisRateLimiter(platform='instagram')
+                budget = BudgetReader(platform='instagram')
+                script_cost = budget.get_api_cost('gemini_script')
+                validate_cost = budget.get_api_cost('gemini_validate')
+                max_attempts = Validator.MAX_REVISIONS + 1
+                estimated_cost = script_cost + (max_attempts * (validate_cost + script_cost))
+
+                if not limiter.check_budget('gemini_script', estimated_cost):
+                    remaining = limiter.get_remaining()
+                    logger.warning(
+                        "Budget insufficient for comment rewrite (need ~%d units, remaining: %d)",
+                        estimated_cost, remaining,
+                    )
+                    from services.mattermost_service import MattermostService
+                    mm = MattermostService.from_settings()
+                    mm.send_status(
+                        f"تعليقك محفوظ ✅ لكن إعادة الكتابة متوقفة — الميزانية غير كافية (متبقي: {remaining} وحدة)",
+                        level='warning', channel_key='script',
+                    )
+                    result['rewrite_skipped'] = 'budget_insufficient'
+                else:
+                    revision_feedback = (
+                        f"تعليق بشري على السكريبت:\n{comment}\n\n"
+                        f"## النص الحالي:\n{row['script_text']}\n\n"
+                        f"أعد كتابة السكريبت الكامل من الصفر مع تطبيق الملاحظات أعلاه. "
+                        f"لا تنسخ النص السابق — اكتب نسخة جديدة تماماً تحلّ كل المشاكل."
+                    )
+
+                    writer = Writer()
+                    writer_result = writer.run(
+                        content_type=row["content_type"],
+                        news_articles=news_articles,
+                        trigger_source="comment",
+                        revision_feedback=revision_feedback,
+                        planned_topic=state.get("proposed_topic", ""),
+                        planned_angle=state.get("proposed_angle", ""),
+                        planned_visual_hook=state.get("visual_hook", ""),
+                    )
+
+                    validator = Validator()
+                    val_result = validator.validate_with_revision(
+                        script_id=writer_result["script_id"],
+                        script_text=writer_result["script_text"],
+                        content_type=row["content_type"],
+                        writer_agent=writer,
+                        news_articles=news_articles,
+                        planned_topic=state.get("proposed_topic", ""),
+                        planned_angle=state.get("proposed_angle", ""),
+                        planned_visual_hook=state.get("visual_hook", ""),
+                    )
+
+                    if val_result.get("approved"):
+                        # Update pipeline state with new script_id
+                        try:
+                            state_file = Path(f"/tmp/pipeline_state_{run_id}.json")
+                            if state_file.is_file():
+                                state = json.loads(state_file.read_text())
+                            state["script_id"] = writer_result["script_id"]
+                            state_file.write_text(json.dumps(state, ensure_ascii=False))
+                        except Exception as e:
+                            logger.warning("Could not update pipeline state: %s", e)
+                        result["new_script_id"] = writer_result["script_id"]
+                    elif val_result.get("generation_failed"):
+                        try:
+                            from services.mattermost_service import MattermostService
+                            MattermostService.from_settings().send_generation_failed(
+                                run_id=run_id, gate_number=2,
+                                last_score=val_result.get("overall_score", 0),
+                                attempts=validator.MAX_REVISIONS + 1,
+                            )
+                        except Exception as e:
+                            logger.warning("Could not send generation_failed notification: %s", e)
+
+                    result["revision_result"] = val_result
+        except Exception as e:
+            logger.error("Comment-triggered rewrite failed: %s", e)
+
     logger.info("Comment processed: gate=%s, length=%d", gate_name, len(comment))
     print(json.dumps(result, ensure_ascii=False))
     return result

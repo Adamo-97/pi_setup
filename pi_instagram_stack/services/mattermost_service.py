@@ -282,11 +282,7 @@ class MattermostService:
             f"{rtl_block('التعليقات تُحفظ في RAG ويتعلم منها النظام.')}\n\n"
         )
 
-        props = {
-            "attachments": [
-                {
-                    "color": "#2196F3" if gate_number < 6 else "#4CAF50",
-                    "actions": [
+        actions = [
                         {
                             "id": f"approveGate{gate_number}",
                             "type": "button",
@@ -316,6 +312,9 @@ class MattermostService:
                                 },
                             },
                         },
+                    ]
+        if gate_number in (0, 1, 2, 4):
+            actions.append(
                         {
                             "id": f"commentGate{gate_number}",
                             "type": "button",
@@ -330,7 +329,13 @@ class MattermostService:
                                 },
                             },
                         },
-                    ],
+            )
+
+        props = {
+            "attachments": [
+                {
+                    "color": "#2196F3" if gate_number < 6 else "#4CAF50",
+                    "actions": actions,
                 }
             ]
         }
@@ -505,6 +510,52 @@ class MattermostService:
         }
 
         return bool(self._post_message(message, props=props, file_ids=file_ids, channel_id=target_channel))
+
+    # ================================================================
+    # Generation failed notification
+    # ================================================================
+
+    def send_generation_failed(
+        self, run_id: str, gate_number: int = 2, last_score: int = 0, attempts: int = 0
+    ) -> bool:
+        """Send a generation-failed alert with a retry button."""
+        target_channel = self._resolve_channel(gate_number)
+        retry_url = (
+            f"{self.n8n_base_url}/webhook/instagram-retry-script"
+            f"?run_id={run_id}&gate={gate_number}&action=retry"
+        )
+        message = (
+            f"### ❌ فشل توليد السكريبت\n\n"
+            f"| التفاصيل | القيمة |\n"
+            f"|:------|:------|\n"
+            f"| **آخر نتيجة** | {last_score}/100 |\n"
+            f"| **عدد المحاولات** | {attempts} |\n"
+            f"| **Run ID** | `{run_id[:12]}...` |\n"
+        )
+        props = {
+            "attachments": [
+                {
+                    "color": "#d00000",
+                    "actions": [
+                        {
+                            "id": "retryScript",
+                            "type": "button",
+                            "name": "🔄 إعادة المحاولة",
+                            "integration": {
+                                "url": retry_url,
+                                "context": {
+                                    "action": "retry",
+                                    "gate": gate_number,
+                                    "run_id": run_id,
+                                    "platform": "instagram",
+                                },
+                            },
+                        },
+                    ],
+                }
+            ]
+        }
+        return bool(self._post_message(message, props=props, channel_id=target_channel))
 
     # ================================================================
     # Status notifications

@@ -132,6 +132,18 @@ def main(
         for issue in result["critical_issues"]:
             logger.warning("  Issue: %s", issue)
 
+    if result.get("generation_failed"):
+        try:
+            from services.mattermost_service import MattermostService
+            MattermostService.from_settings().send_generation_failed(
+                run_id=run_id,
+                gate_number=2,
+                last_score=result.get("overall_score", 0),
+                attempts=Validator.MAX_REVISIONS + 1,
+            )
+        except Exception as e:
+            logger.error("Failed to send generation_failed notification: %s", e)
+
     # Print for n8n
     print(json.dumps(result, ensure_ascii=False))
     return result

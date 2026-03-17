@@ -240,6 +240,8 @@ class Validator(BaseProcessor):
                 current_id = revision_result["script_id"]
 
         logger.warning("Script failed after %d attempts", self.MAX_REVISIONS + 1)
+        logger.error("Script generation failed after %d attempts — not returning rejected content", self.MAX_REVISIONS + 1)
+        result['generation_failed'] = True
         return result
 
     # ================================================================
