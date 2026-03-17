@@ -214,11 +214,12 @@ class Validator(BaseProcessor):
                 # Build revision feedback from validator issues
                 issues = "\n".join(f"- {i}" for i in result["critical_issues"])
                 suggestions = "\n".join(f"- {s}" for s in result["suggestions"])
+                snippet = current_text[:200] + "..." if len(current_text) > 200 else current_text
                 revision_feedback = (
                     f"السكريبت السابق حصل على {result['overall_score']}/100.\n\n"
                     f"## مشاكل يجب حلّها (كل مشكلة = سبب رفض):\n{issues}\n\n"
                     f"## اقتراحات تحسين:\n{suggestions}\n\n"
-                    f"## النص المرفوض:\n{current_text}\n\n"
+                    f"## مقتطف من النص المرفوض:\n{snippet}\n\n"
                     f"أعد كتابة السكريبت الكامل من الصفر مع تطبيق كل الملاحظات أعلاه. "
                     f"لا تنسخ النص السابق — اكتب نسخة جديدة تماماً تحلّ كل المشاكل. "
                     f"تأكّد أن كل كلمة فيها حرف مشدّد تحمل شدّة، "

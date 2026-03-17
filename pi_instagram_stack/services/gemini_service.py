@@ -87,7 +87,13 @@ class GeminiService:
                 if not candidates:
                     err = data.get("error", {}).get("message", "No candidates returned")
                     raise RuntimeError(f"Gemini returned no candidates: {err}")
-                return candidates[0]["content"]["parts"][0]["text"]
+                finish_reason = candidates[0].get("finishReason", "STOP")
+                text = candidates[0]["content"]["parts"][0]["text"]
+                if finish_reason == "MAX_TOKENS" and attempt < max_retries:
+                    logger.warning("Gemini response truncated (MAX_TOKENS) on attempt %d, retrying...", attempt + 1)
+                    time.sleep(2**attempt + random.uniform(0, 1))
+                    continue
+                return text
             except requests.exceptions.HTTPError:
                 raise
             except Exception as e:
