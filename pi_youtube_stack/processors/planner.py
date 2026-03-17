@@ -34,6 +34,27 @@ from services.budget_reader import BudgetReader
 
 logger = logging.getLogger(__name__)
 
+# Weekly content rotation: which Saturday of the month → content type
+_WEEK_CONTENT_MAP = {
+    1: "upcoming_games",
+    2: "game_review",
+    3: "industry_news",
+    4: "monthly_games",
+}
+
+
+def get_weekly_content_type(today: Optional[date] = None) -> str:
+    """Return the content type for this week's Saturday based on week-of-month.
+
+    Week 1 (1st Sat): upcoming_games
+    Week 2 (2nd Sat): game_review
+    Week 3 (3rd Sat): industry_news
+    Week 4 (4th+ Sat): monthly_games
+    """
+    d = today or date.today()
+    week_num = min(d.day // 7 + 1, 4)
+    return _WEEK_CONTENT_MAP[week_num]
+
 from config.prompts.planner_prompts import PLANNER_SYSTEM_PROMPT, get_planner_prompt
 
 
@@ -112,9 +133,9 @@ class Planner(BaseProcessor):
             current_date=date.today().isoformat(),
         )
 
-        response = self.gemini.generate(
+        response = self.gemini.generate_text(
             system_prompt=PLANNER_SYSTEM_PROMPT,
-            user_prompt=prompt,
+            prompt=prompt,
         )
 
         # 6. Parse Gemini response

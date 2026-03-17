@@ -1,379 +1,216 @@
 # -*- coding: utf-8 -*-
 """
-Mattermost Service
-====================
-Handles all Mattermost interactions for the Human-in-the-Loop approval flow:
-  - Sending script drafts for review (full text — no truncation needed)
-  - Uploading generated audio files directly for approval
-  - Formatting rich messages with game data
-  - Interactive approve/reject buttons via n8n webhooks
-
-Two-step approval flow:
-  1. Script text → Mattermost → Human approves/rejects
-  2. Generated audio → Mattermost (file attached) → Human approves/rejects
-
-Mattermost API Reference:
-  - POST /api/v4/posts          — Create a post (up to 16,383 chars)
-  - POST /api/v4/files          — Upload files (up to 100 MB)
-  - Authorization: Bearer TOKEN — Bot Personal Access Token
+Mattermost Service — YouTube
+===============================
+4-gate pipeline (Plan → News/Data → Script → Voiceover).
+Audio delivery only — no publish gate, no metadata gate.
+Each gate posts to its own dedicated channel.
 """
 
-import json
 import logging
 import os
 from pathlib import Path
-from typing import Optional
+from typing import Any, Dict, List, Optional
 
 import requests
 
-from config.settings import settings
+logger = logging.getLogger("youtube.mattermost")
 
-logger = logging.getLogger(__name__)
+PLATFORM = "youtube"
+PLATFORM_LABEL = "YouTube"
 
 
 class MattermostService:
-    """
-    Mattermost REST API client for human-in-the-loop approval.
+    """Mattermost REST API client for YouTube pipeline notifications."""
 
-    Usage:
-        service = MattermostService()
-        service.send_script_for_approval(script_data, metadata)
-    """
-
-    TIMEOUT = 30  # seconds (higher than Slack — supports file uploads)
-
-    def __init__(self):
-        """Initialize with Mattermost configuration."""
-        cfg = settings.mattermost
-        self.base_url = cfg.url.rstrip("/")
-        self.bot_token = cfg.bot_token
-        self.channel_id = cfg.channel_id
+    def __init__(
+        self,
+        url: str = "",
+        bot_token: str = "",
+        channel_map: Optional[Dict[str, str]] = None,
+        n8n_base_url: str = "",
+    ):
+        if not url or not bot_token:
+            from config.settings import settings
+            mm = settings.mattermost
+            url = url or mm.url
+            bot_token = bot_token or mm.bot_token
+            channel_map = channel_map or {
+                "plan": mm.channel_plan,
+                "news": mm.channel_news,
+                "script": mm.channel_script,
+                "voiceover": mm.channel_voiceover,
+            }
+        self.base_url = url.rstrip("/")
+        self.bot_token = bot_token
+        self.channel_map: Dict[str, str] = channel_map or {}
+        self.n8n_base_url = (n8n_base_url or os.environ.get("N8N_BASE_URL", "http://192.168.0.11:5678")).rstrip("/")
         self._headers = {
             "Authorization": f"Bearer {self.bot_token}",
             "Content-Type": "application/json",
         }
-        logger.info("MattermostService initialized (channel_id=%s)", self.channel_id)
 
-    # ------------------------------------------------------------------
+    # ================================================================
+    # Channel routing
+    # ================================================================
+
+    GATE_CHANNELS = {0: "plan", 1: "news", 2: "script", 3: "voiceover"}
+
+    GATE_LABELS = {
+        0: ("\U0001f4cb", "Gate 0 — خطة المحتوى"),
+        1: ("\U0001f4f0", "Gate 1 — جمع الأخبار والبيانات"),
+        2: ("\U0001f4dd", "Gate 2 — السكريبت"),
+        3: ("\U0001f399\ufe0f", "Gate 3 — التعليق الصوتي"),
+    }
+
+    def _resolve_channel(self, gate_number: Optional[int] = None, channel_key: Optional[str] = None) -> str:
+        if channel_key and self.channel_map.get(channel_key):
+            return self.channel_map[channel_key]
+        if gate_number is not None:
+            key = self.GATE_CHANNELS.get(gate_number, "plan")
+            if self.channel_map.get(key):
+                return self.channel_map[key]
+        return self.channel_map.get("plan", "")
+
+    @classmethod
+    def from_settings(cls) -> "MattermostService":
+        from config.settings import settings
+        mm = settings.mattermost
+        channel_map = {
+            "plan": mm.channel_plan,
+            "news": mm.channel_news,
+            "script": mm.channel_script,
+            "voiceover": mm.channel_voiceover,
+        }
+        return cls(
+            url=mm.url,
+            bot_token=mm.bot_token,
+            channel_map=channel_map,
+        )
+
+    # ================================================================
     # Core API helpers
-    # ------------------------------------------------------------------
+    # ================================================================
 
     def _post_message(
         self,
         message: str,
         props: Optional[dict] = None,
         file_ids: Optional[list] = None,
-    ) -> bool:
-        """
-        Create a post in the configured Mattermost channel.
-
-        Args:
-            message: Markdown-formatted message text (up to 16,383 chars).
-            props: Optional props dict (attachments, etc.).
-            file_ids: Optional list of uploaded file IDs to attach.
-
-        Returns:
-            True if sent successfully.
-        """
-        payload = {
-            "channel_id": self.channel_id,
-            "message": message,
-        }
+        channel_id: Optional[str] = None,
+    ) -> Optional[str]:
+        target = channel_id or self._resolve_channel(0)
+        payload: Dict[str, Any] = {"channel_id": target, "message": message}
         if props:
             payload["props"] = props
         if file_ids:
             payload["file_ids"] = file_ids
-
         try:
-            response = requests.post(
-                f"{self.base_url}/api/v4/posts",
-                json=payload,
-                headers=self._headers,
-                timeout=self.TIMEOUT,
+            resp = requests.post(
+                f"{self.base_url}/api/v4/posts", json=payload,
+                headers=self._headers, timeout=30,
             )
-
-            if response.status_code in (200, 201):
-                logger.info("Mattermost message sent successfully.")
-                return True
-            else:
-                logger.error(
-                    "Mattermost post failed: status=%d, body=%s",
-                    response.status_code,
-                    response.text[:200],
-                )
-                return False
-
-        except requests.exceptions.RequestException as exc:
-            logger.error("Mattermost post request failed: %s", exc)
-            return False
-
-    def _upload_file(self, file_path: str) -> Optional[str]:
-        """
-        Upload a file to Mattermost and return its file ID.
-
-        Args:
-            file_path: Absolute path to the file on disk.
-
-        Returns:
-            File ID string, or None on failure.
-        """
-        path = Path(file_path)
-        if not path.is_file():
-            logger.error("File not found for upload: %s", file_path)
+            if resp.status_code in (200, 201):
+                post_id = resp.json().get("id", "")
+                logger.info("Message sent -> channel %s (post %s)", target[:8], post_id[:8])
+                return post_id
+            logger.error("Send failed: %d %s", resp.status_code, resp.text[:200])
+            return None
+        except Exception as e:
+            logger.error("Send error: %s", e)
             return None
 
+    def _upload_file(self, file_path: str, channel_id: Optional[str] = None) -> Optional[str]:
+        path = Path(file_path)
+        if not path.is_file():
+            logger.error("File not found: %s", file_path)
+            return None
+        target = channel_id or self._resolve_channel(0)
         try:
             with open(file_path, "rb") as f:
-                response = requests.post(
+                resp = requests.post(
                     f"{self.base_url}/api/v4/files",
                     headers={"Authorization": f"Bearer {self.bot_token}"},
                     files={"files": (path.name, f)},
-                    data={"channel_id": self.channel_id},
-                    timeout=120,  # generous timeout for large files
+                    data={"channel_id": target},
+                    timeout=120,
                 )
-
-            if response.status_code in (200, 201):
-                file_info = response.json()
-                file_id = file_info["file_infos"][0]["id"]
-                logger.info("File uploaded to Mattermost: %s → %s", path.name, file_id)
+            if resp.status_code in (200, 201):
+                file_id = resp.json()["file_infos"][0]["id"]
+                logger.info("File uploaded: %s -> %s", path.name, file_id)
                 return file_id
-            else:
-                logger.error(
-                    "Mattermost file upload failed: status=%d, body=%s",
-                    response.status_code,
-                    response.text[:200],
-                )
-                return None
-
-        except requests.exceptions.RequestException as exc:
-            logger.error("Mattermost file upload request failed: %s", exc)
+            logger.error("Upload failed: %d %s", resp.status_code, resp.text[:200])
+            return None
+        except Exception as e:
+            logger.error("Upload error: %s", e)
             return None
 
-    # ------------------------------------------------------------------
-    # Script approval (Step 1)
-    # ------------------------------------------------------------------
+    def get_post_thread(self, post_id: str) -> List[dict]:
+        """Get all replies to a post (for fetching uploaded files)."""
+        try:
+            resp = requests.get(
+                f"{self.base_url}/api/v4/posts/{post_id}/thread",
+                headers=self._headers, timeout=15,
+            )
+            if resp.status_code == 200:
+                data = resp.json()
+                order = data.get("order", [])
+                posts = data.get("posts", {})
+                return [posts[pid] for pid in order if pid != post_id and pid in posts]
+            return []
+        except Exception as e:
+            logger.error("get_post_thread error: %s", e)
+            return []
 
-    def send_script_for_approval(
-        self,
-        script_id: str,
-        content_type: str,
-        title: str,
-        script_text: str,
-        validation_summary: str,
-        overall_score: int,
-        game_count: int = 0,
-        pipeline_run_id: Optional[str] = None,
-    ) -> bool:
-        """
-        Send a generated script to Mattermost for human approval (Step 1).
+    def get_file_url(self, file_id: str) -> str:
+        return f"{self.base_url}/api/v4/files/{file_id}"
 
-        Unlike Slack (3,000 char limit), Mattermost supports up to 16,383 chars
-        per post — the FULL Arabic script is sent without truncation.
+    # ================================================================
+    # Action button builders
+    # ================================================================
 
-        Args:
-            script_id: UUID of the script record.
-            content_type: Content type ID.
-            title: Script title.
-            script_text: The full Arabic script text.
-            validation_summary: Validator Agent's summary.
-            overall_score: Validation score (0-100).
-            game_count: Number of games covered.
-            pipeline_run_id: Pipeline run UUID for callback.
-
-        Returns:
-            True if sent successfully.
-        """
-        # Build n8n callback URLs
-        n8n_cfg = settings.n8n
-        approve_url = (
-            f"{n8n_cfg.base_url}{n8n_cfg.webhook_path_approve_script}"
-            f"?script_id={script_id}&action=approve"
-            f"&pipeline_run_id={pipeline_run_id or ''}"
-        )
-        reject_url = (
-            f"{n8n_cfg.base_url}{n8n_cfg.webhook_path_approve_script}"
-            f"?script_id={script_id}&action=reject"
-            f"&pipeline_run_id={pipeline_run_id or ''}"
-        )
-
-        # Score emoji
-        score_emoji = (
-            ":large_green_circle:"
-            if overall_score >= 80
-            else ":large_yellow_circle:" if overall_score >= 60 else ":red_circle:"
-        )
-
-        # Full script — no truncation needed (Mattermost supports 16,383 chars)
-        message = (
-            f"### :memo: سكريبت جديد للمراجعة — {title}\n\n"
-            f"| الحقل | القيمة |\n"
-            f"|:------|:------|\n"
-            f"| **النوع** | {content_type} |\n"
-            f"| **عدد الألعاب** | {game_count} |\n"
-            f"| **تقييم الـ AI** | {score_emoji} {overall_score}/100 |\n"
-            f"| **الحالة** | بانتظار الموافقة |\n\n"
-            f"---\n\n"
-            f"**ملخص المراجعة:**\n{validation_summary}\n\n"
-            f"---\n\n"
-            f"**السكريبت:**\n```\n{script_text}\n```\n\n"
-            f"---\n\n"
-            f"_Script ID: `{script_id}` | Pipeline: `{pipeline_run_id or 'N/A'}`_"
-        )
-
-        props = {
-            "attachments": [
-                {
-                    "color": (
-                        "#36a64f"
-                        if overall_score >= 80
-                        else "#daa038" if overall_score >= 60 else "#d00000"
-                    ),
-                    "actions": [
-                        {
-                            "id": "approveScript",
-                            "name": "✅ موافقة",
-                            "integration": {
-                                "url": approve_url,
-                                "context": {
-                                    "action": "approve",
-                                    "script_id": script_id,
-                                    "pipeline_run_id": pipeline_run_id or "",
-                                },
-                            },
-                        },
-                        {
-                            "id": "rejectScript",
-                            "name": "❌ رفض",
-                            "style": "danger",
-                            "integration": {
-                                "url": reject_url,
-                                "context": {
-                                    "action": "reject",
-                                    "script_id": script_id,
-                                    "pipeline_run_id": pipeline_run_id or "",
-                                },
-                            },
-                        },
-                    ],
-                }
-            ]
+    def _build_approve_action(self, gate_number: int, run_id: str) -> dict:
+        url = f"{self.n8n_base_url}/webhook/{PLATFORM}-approve?gate={gate_number}&run_id={run_id}&action=approve"
+        return {
+            "id": f"approveGate{gate_number}",
+            "type": "button",
+            "name": "\u2705 موافقة",
+            "integration": {
+                "url": url,
+                "context": {"action": "approve", "gate": gate_number, "run_id": run_id, "platform": PLATFORM},
+            },
         }
 
-        return self._post_message(message, props=props)
-
-    # ------------------------------------------------------------------
-    # Audio approval (Step 2)
-    # ------------------------------------------------------------------
-
-    def send_audio_for_approval(
-        self,
-        script_id: str,
-        title: str,
-        audio_duration: float,
-        audio_file_path: str,
-        pipeline_run_id: Optional[str] = None,
-    ) -> bool:
-        """
-        Upload generated audio and send approval message (Step 2).
-
-        Unlike Slack (can't send files via webhooks), Mattermost supports
-        direct file uploads up to 100 MB via the REST API.
-
-        Args:
-            script_id: UUID of the script record.
-            title: Script title.
-            audio_duration: Duration in seconds.
-            audio_file_path: Path to the .wav file on disk.
-            pipeline_run_id: Pipeline run UUID.
-
-        Returns:
-            True if sent successfully.
-        """
-        # Build n8n callback URLs
-        n8n_cfg = settings.n8n
-        approve_url = (
-            f"{n8n_cfg.base_url}{n8n_cfg.webhook_path_approve_audio}"
-            f"?script_id={script_id}&action=approve"
-            f"&pipeline_run_id={pipeline_run_id or ''}"
-        )
-        reject_url = (
-            f"{n8n_cfg.base_url}{n8n_cfg.webhook_path_approve_audio}"
-            f"?script_id={script_id}&action=reject"
-            f"&pipeline_run_id={pipeline_run_id or ''}"
-        )
-
-        duration_min = audio_duration / 60
-
-        # Upload audio file directly to Mattermost
-        file_ids = []
-        file_id = self._upload_file(audio_file_path)
-        if file_id:
-            file_ids.append(file_id)
-
-        message = (
-            f"### :studio_microphone: تعليق صوتي جاهز — {title}\n\n"
-            f"| الحقل | القيمة |\n"
-            f"|:------|:------|\n"
-            f"| **المدة** | {duration_min:.1f} دقيقة |\n"
-            f"| **الملف** | `{audio_file_path}` |\n\n"
-        )
-
-        if file_ids:
-            message += ":white_check_mark: **الملف الصوتي مرفق أعلاه — يمكنك تشغيله مباشرة في Mattermost.**\n\n"
-        else:
-            message += ":warning: **لم يتم رفع الملف — يمكنك تحميله من المسار أعلاه للمراجعة.**\n\n"
-
-        props = {
-            "attachments": [
-                {
-                    "color": "#2196F3",
-                    "actions": [
-                        {
-                            "id": "approveAudio",
-                            "name": "✅ موافقة على الصوت",
-                            "integration": {
-                                "url": approve_url,
-                                "context": {
-                                    "action": "approve",
-                                    "script_id": script_id,
-                                    "pipeline_run_id": pipeline_run_id or "",
-                                },
-                            },
-                        },
-                        {
-                            "id": "rejectAudio",
-                            "name": "❌ رفض — إعادة توليد",
-                            "style": "danger",
-                            "integration": {
-                                "url": reject_url,
-                                "context": {
-                                    "action": "reject",
-                                    "script_id": script_id,
-                                    "pipeline_run_id": pipeline_run_id or "",
-                                },
-                            },
-                        },
-                    ],
-                }
-            ]
+    def _build_reject_action(self, gate_number: int, run_id: str) -> dict:
+        url = f"{self.n8n_base_url}/webhook/{PLATFORM}-reject?gate={gate_number}&run_id={run_id}&action=reject"
+        return {
+            "id": f"rejectGate{gate_number}",
+            "type": "button",
+            "name": "\u274c رفض",
+            "style": "danger",
+            "integration": {
+                "url": url,
+                "context": {"action": "reject", "gate": gate_number, "run_id": run_id, "platform": PLATFORM},
+            },
         }
 
-        return self._post_message(message, props=props, file_ids=file_ids)
+    def _build_comment_action(self, gate_number: int, run_id: str) -> dict:
+        url = f"{self.n8n_base_url}/webhook/{PLATFORM}-comment"
+        return {
+            "id": f"commentGate{gate_number}",
+            "type": "button",
+            "name": "\U0001f4ac تعليق",
+            "integration": {
+                "url": url,
+                "context": {"action": "comment", "gate": gate_number, "run_id": run_id, "platform": PLATFORM},
+            },
+        }
 
-    # ------------------------------------------------------------------
-    # Universal Gate Approval (Human-in-the-Loop)
-    # ------------------------------------------------------------------
+    # ================================================================
+    # Gate message sender
+    # ================================================================
 
-    GATE_LABELS = {
-        0: ("📋", "Gate 0 — خطة المحتوى", "Plan Approval"),
-        1: ("📊", "Gate 1 — جمع البيانات", "Data Approval"),
-        2: ("📝", "Gate 2 — السكريبت", "Script Approval"),
-        3: ("🏷️", "Gate 3 — البيانات الوصفية", "Metadata Approval"),
-        4: ("🎙️", "Gate 4 — التعليق الصوتي", "Audio Approval"),
-        5: ("🚀", "Gate 5 — النشر النهائي", "Final Publish"),
-    }
-
-    def send_gate_approval(
+    def send_gate_message(
         self,
         gate_number: int,
         summary: str,
@@ -381,139 +218,164 @@ class MattermostService:
         run_id: str,
         file_ids: Optional[list] = None,
         budget_status: str = "",
-    ) -> bool:
-        """
-        Universal approval gate for Human-in-the-Loop flow.
+        file_paths: Optional[List[str]] = None,
+    ) -> Optional[str]:
+        target_channel = self._resolve_channel(gate_number)
+        emoji, label_ar = self.GATE_LABELS.get(gate_number, ("\U0001f532", f"Gate {gate_number}"))
 
-        Sends a structured Mattermost message with Approve/Reject buttons
-        that trigger n8n webhooks. Used for ALL 6 gates (0-5).
-
-        Gate 5 (Final Publish) includes thumbnail upload instructions:
-        the human replies to the thread with an image, and n8n extracts it.
-
-        Args:
-            gate_number: Gate index (0-5).
-            summary: Human-readable summary of what's being approved.
-            details: Key-value dict rendered as a Markdown table.
-            run_id: Pipeline run UUID for callback routing.
-            file_ids: Optional Mattermost file IDs to attach.
-            budget_status: Budget usage string for display.
-
-        Returns:
-            True if sent successfully.
-        """
-        emoji, label_ar, label_en = self.GATE_LABELS.get(
-            gate_number, ("🔲", f"Gate {gate_number}", f"Gate {gate_number}")
-        )
-
-        n8n_cfg = settings.n8n
-        approve_url = (
-            f"{n8n_cfg.base_url}/webhook/youtube-approve"
-            f"?gate={gate_number}&run_id={run_id}&action=approve"
-        )
-        reject_url = (
-            f"{n8n_cfg.base_url}/webhook/youtube-reject"
-            f"?gate={gate_number}&run_id={run_id}&action=reject"
+        # Extract script body from details if present
+        display_details = dict(details or {})
+        script_body = (
+            display_details.pop("script_body", "")
+            or display_details.pop("script_text", "")
+            or display_details.pop("script", "")
         )
 
         # Build details table
-        table_rows = "\n".join(f"| **{k}** | {v} |" for k, v in details.items())
+        detail_block = ""
+        if display_details:
+            items = list(display_details.items())
+            first_k, first_v = items[0]
+            detail_block = f"| **{first_k}** | {first_v} |\n|:------|:------|\n"
+            detail_block += "\n".join(f"| **{k}** | {v} |" for k, v in items[1:])
+            detail_block += "\n\n"
 
-        message = (
-            f"### {emoji} {label_ar}\n\n"
-            f"**Pipeline Run:** `{run_id[:12]}...`\n\n"
-            f"| الحقل | القيمة |\n"
-            f"|:------|:------|\n"
-            f"{table_rows}\n\n"
-        )
+        message = f"### {emoji} {label_ar}\n\n**Pipeline Run:** `{run_id[:12]}...`\n\n{detail_block}"
 
         if budget_status:
-            message += f"**📊 الميزانية:** {budget_status}\n\n"
+            message += f"**\U0001f4ca الميزانية:** {budget_status}\n\n"
 
         message += f"---\n\n{summary}\n\n"
 
-        # Gate 5 — add thumbnail upload instructions
-        if gate_number == 5:
-            message += (
-                "---\n\n"
-                "### 🖼️ تحميل الصورة المصغرة\n\n"
-                "**لإضافة الصورة المصغرة (Thumbnail):**\n"
-                "1. اضغط **رد** (Reply) على هذه الرسالة\n"
-                "2. أرفق صورة PNG أو JPEG (1280×720 مثالي)\n"
-                "3. ثم اضغط **موافقة** أدناه\n\n"
-                "n8n سيأخذ الصورة المرفقة تلقائياً من الرد.\n\n"
-            )
+        if script_body:
+            message += f"### \U0001f4dd نص السكريبت\n\n\u200f{script_body}\n\n"
 
-        props = {
-            "attachments": [
-                {
-                    "color": "#2196F3" if gate_number < 5 else "#4CAF50",
-                    "actions": [
-                        {
-                            "id": f"approveGate{gate_number}",
-                            "name": "✅ موافقة",
-                            "integration": {
-                                "url": approve_url,
-                                "context": {
-                                    "action": "approve",
-                                    "gate": gate_number,
-                                    "run_id": run_id,
-                                    "platform": "youtube",
-                                },
-                            },
-                        },
-                        {
-                            "id": f"rejectGate{gate_number}",
-                            "name": "❌ رفض",
-                            "style": "danger",
-                            "integration": {
-                                "url": reject_url,
-                                "context": {
-                                    "action": "reject",
-                                    "gate": gate_number,
-                                    "run_id": run_id,
-                                    "platform": "youtube",
-                                },
-                            },
-                        },
-                    ],
-                }
-            ]
+        # Upload attached files
+        uploaded_file_ids = list(file_ids or [])
+        if file_paths:
+            for fp in file_paths:
+                fid = self._upload_file(fp, channel_id=target_channel)
+                if fid:
+                    uploaded_file_ids.append(fid)
+
+        # Build actions per gate
+        actions = [self._build_approve_action(gate_number, run_id), self._build_reject_action(gate_number, run_id)]
+        if gate_number == 2:
+            actions.append(self._build_comment_action(gate_number, run_id))
+
+        props = {"attachments": [{"color": "#2196F3", "actions": actions}]}
+
+        return self._post_message(message, props=props, file_ids=uploaded_file_ids, channel_id=target_channel)
+
+    # ================================================================
+    # Comment dialog support
+    # ================================================================
+
+    def open_comment_dialog(self, trigger_id: str, gate_number: int, run_id: str) -> bool:
+        """Open an interactive dialog for the user to enter a comment."""
+        dialog = {
+            "trigger_id": trigger_id,
+            "url": f"{self.n8n_base_url}/webhook/{PLATFORM}-dialog-submit",
+            "dialog": {
+                "callback_id": f"comment_{gate_number}_{run_id}",
+                "title": "تعليق على المحتوى",
+                "submit_label": "إرسال",
+                "elements": [
+                    {
+                        "display_name": "التعليق",
+                        "name": "comment_text",
+                        "type": "textarea",
+                        "placeholder": "اكتب ملاحظاتك هنا...",
+                    }
+                ],
+            },
         }
+        try:
+            resp = requests.post(
+                f"{self.base_url}/api/v4/actions/dialogs/open",
+                json=dialog, headers=self._headers, timeout=15,
+            )
+            return resp.status_code == 200
+        except Exception as e:
+            logger.error("open_comment_dialog error: %s", e)
+            return False
 
-        return self._post_message(message, props=props, file_ids=file_ids)
+    def handle_comment_submit(self, callback_id: str, submission: dict, user_name: str = "") -> bool:
+        """Process a submitted comment dialog."""
+        parts = callback_id.split("_", 2)
+        if len(parts) < 3:
+            return False
+        gate_number = int(parts[1])
+        run_id = parts[2]
+        comment = submission.get("comment_text", "")
+        if not comment:
+            return False
+        target_channel = self._resolve_channel(gate_number)
+        msg = f"\U0001f4ac **تعليق** من {user_name}:\n> {comment}\n\n_Gate {gate_number} | Run `{run_id[:12]}...`_"
+        return bool(self._post_message(msg, channel_id=target_channel))
 
-    # ------------------------------------------------------------------
-    # Simple notifications
-    # ------------------------------------------------------------------
+    # ================================================================
+    # Generation failed / retry
+    # ================================================================
 
-    def send_notification(self, text: str, emoji: str = ":information_source:") -> bool:
-        """
-        Send a simple text notification to Mattermost.
-
-        Args:
-            text: Message text.
-            emoji: Emoji prefix (Mattermost emoji syntax).
-
-        Returns:
-            True if sent successfully.
-        """
-        return self._post_message(f"{emoji} {text}")
-
-    def send_error(self, error_message: str, context: str = "") -> bool:
-        """
-        Send an error notification to Mattermost.
-
-        Args:
-            error_message: The error description.
-            context: Additional context (e.g., which step failed).
-
-        Returns:
-            True if sent successfully.
-        """
+    def send_generation_failed(self, run_id: str, gate_number: int = 2, last_score: int = 0, attempts: int = 0) -> bool:
+        target_channel = self._resolve_channel(gate_number)
+        retry_url = f"{self.n8n_base_url}/webhook/{PLATFORM}-retry-script?run_id={run_id}&gate={gate_number}&action=retry"
         message = (
-            f"### :rotating_light: خطأ في نظام إنتاج المحتوى\n\n"
-            f"**السياق:** {context}\n\n"
-            f"**الخطأ:**\n```\n{error_message}\n```"
+            f"### \u274c فشل توليد السكريبت\n\n"
+            f"| التفاصيل | القيمة |\n|:------|:------|\n"
+            f"| **آخر نتيجة** | {last_score}/100 |\n"
+            f"| **عدد المحاولات** | {attempts} |\n"
+            f"| **Run ID** | `{run_id[:12]}...` |\n"
         )
-        return self._post_message(message)
+        props = {"attachments": [{"color": "#d00000", "actions": [{
+            "id": "retryScript", "type": "button", "name": "\U0001f504 إعادة المحاولة",
+            "integration": {"url": retry_url, "context": {"action": "retry", "gate": gate_number, "run_id": run_id, "platform": PLATFORM}},
+        }]}]}
+        return bool(self._post_message(message, props=props, channel_id=target_channel))
+
+    # ================================================================
+    # Post-action updates
+    # ================================================================
+
+    def update_post_actions(self, post_id: str, action: str, gate_number: int, user_name: str = "", comment: str = "") -> bool:
+        if action == "approve":
+            status_text = f"\u2705 **تمت الموافقة** بواسطة {user_name}" if user_name else "\u2705 **تمت الموافقة**"
+            color = "#4CAF50"
+        elif action == "reject":
+            status_text = f"\u274c **تم الرفض** بواسطة {user_name}" if user_name else "\u274c **تم الرفض**"
+            color = "#d00000"
+        else:
+            status_text = f"\U0001f4ac **تعليق** من {user_name}" if user_name else "\U0001f4ac **تعليق مُرسَل**"
+            color = "#FF9800"
+        if comment:
+            status_text += f"\n> {comment}"
+        try:
+            resp = requests.get(f"{self.base_url}/api/v4/posts/{post_id}", headers=self._headers, timeout=15)
+            if resp.status_code != 200:
+                return False
+            post_data = resp.json()
+            update_payload = {
+                "id": post_id,
+                "message": post_data.get("message", ""),
+                "props": {"attachments": [{"color": color, "text": status_text}]},
+            }
+            resp = requests.put(f"{self.base_url}/api/v4/posts/{post_id}", json=update_payload, headers=self._headers, timeout=15)
+            return resp.status_code == 200
+        except Exception as e:
+            logger.error("Post update error: %s", e)
+            return False
+
+    # ================================================================
+    # Status / error
+    # ================================================================
+
+    def send_status(self, message: str, level: str = "info", channel_key: Optional[str] = None) -> bool:
+        emoji_map = {"info": ":information_source:", "success": ":white_check_mark:", "warning": ":warning:", "error": ":x:"}
+        target = self._resolve_channel(channel_key=channel_key) if channel_key else self._resolve_channel(0)
+        return bool(self._post_message(f"{emoji_map.get(level, ':information_source:')} **{PLATFORM_LABEL} Pipeline:** {message}", channel_id=target))
+
+    def send_error(self, step: str, error: str) -> bool:
+        target = self._resolve_channel(0)
+        message = f"### :red_circle: {PLATFORM_LABEL} Pipeline Error\n\n**Step:** {step}\n\n**Error:**\n```\n{error}\n```"
+        return bool(self._post_message(message, channel_id=target))

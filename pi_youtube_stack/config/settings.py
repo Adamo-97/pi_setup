@@ -111,7 +111,10 @@ class MattermostConfig:
 
     url: str
     bot_token: str
-    channel_id: str
+    channel_plan: str
+    channel_news: str
+    channel_script: str
+    channel_voiceover: str
 
 
 @dataclass(frozen=True)
@@ -228,7 +231,10 @@ def _build_mattermost() -> MattermostConfig:
     return MattermostConfig(
         url=_require_env("MATTERMOST_URL"),
         bot_token=_require_env("MATTERMOST_BOT_TOKEN"),
-        channel_id=_require_env("MATTERMOST_CHANNEL_ID"),
+        channel_plan=_require_env("MATTERMOST_CHANNEL_PLAN_ID"),
+        channel_news=_require_env("MATTERMOST_CHANNEL_NEWS_ID"),
+        channel_script=_require_env("MATTERMOST_CHANNEL_SCRIPT_ID"),
+        channel_voiceover=_require_env("MATTERMOST_CHANNEL_VOICEOVER_ID"),
     )
 
 
@@ -304,37 +310,45 @@ def _build_paths() -> PathsConfig:
 # ---------------------------------------------------------------------------
 CONTENT_TYPES: list[ContentTypeConfig] = [
     ContentTypeConfig(
-        type_id="monthly_releases",
-        display_name="إصدارات الشهر",
+        type_id="upcoming_games",
+        display_name="ألعاب قادمة",
+        description=(
+            "A preview of exciting upcoming game releases. Covers trailers, "
+            "expected features, developer track record, and hype analysis."
+        ),
+        schedule_day=1,  # Week 1 Saturday
+        schedule_type="monthly",
+    ),
+    ContentTypeConfig(
+        type_id="game_review",
+        display_name="مراجعة لعبة",
+        description=(
+            "An in-depth review of a major game title. Covers gameplay, "
+            "story, graphics, performance, value for money, and Arabic support."
+        ),
+        schedule_day=2,  # Week 2 Saturday
+        schedule_type="monthly",
+    ),
+    ContentTypeConfig(
+        type_id="industry_news",
+        display_name="أخبار الصناعة",
+        description=(
+            "Weekly gaming industry news roundup. Covers acquisitions, "
+            "studio updates, platform announcements, and market trends."
+        ),
+        schedule_day=3,  # Week 3 Saturday
+        schedule_type="monthly",
+    ),
+    ContentTypeConfig(
+        type_id="monthly_games",
+        display_name="ألعاب الشهر",
         description=(
             "A comprehensive roundup of all major game releases for the current month. "
             "Covers release dates, platforms, pricing, Game Pass availability, "
             "and Arabic language support."
         ),
-        schedule_day=25,
+        schedule_day=4,  # Week 4 Saturday
         schedule_type="monthly",
-    ),
-    ContentTypeConfig(
-        type_id="aaa_review",
-        display_name="مراجعة لعبة AAA",
-        description=(
-            "An in-depth review of a major AAA game title. Covers gameplay, "
-            "story, graphics, performance, value for money, and Arabic support. "
-            "Triggered mid-month or when a major title launches."
-        ),
-        schedule_day=0,
-        schedule_type="event",
-    ),
-    ContentTypeConfig(
-        type_id="upcoming_games",
-        display_name="ألعاب قادمة",
-        description=(
-            "A preview of exciting upcoming game releases. Covers trailers, "
-            "expected features, developer track record, and hype analysis. "
-            "Triggered when major announcements or showcases occur."
-        ),
-        schedule_day=0,
-        schedule_type="event",
     ),
 ]
 
