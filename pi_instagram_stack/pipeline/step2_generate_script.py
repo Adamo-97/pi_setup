@@ -141,10 +141,15 @@ if __name__ == "__main__":
     parser.add_argument("--visual-hook", default="", help="Approved opening visual hook")
     parser.add_argument("--run-id", default=None, help="n8n run ID (ignored, for tracking)")
     args = parser.parse_args()
-    main(
-        content_type=args.type,
-        duration=args.duration,
-        topic=args.topic,
-        angle=args.angle,
-        visual_hook=args.visual_hook,
-    )
+    try:
+        main(
+            content_type=args.type,
+            duration=args.duration,
+            topic=args.topic,
+            angle=args.angle,
+            visual_hook=args.visual_hook,
+        )
+    except Exception as e:
+        logger.error("Step 2 failed: %s", e)
+        print(json.dumps({"error": str(e)}, ensure_ascii=False))
+        sys.exit(1)
