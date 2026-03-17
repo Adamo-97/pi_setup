@@ -1,10 +1,10 @@
 # -*- coding: utf-8 -*-
 """
-Writer Agent
+Writer Processor
 ============
-Generates TikTok scripts in Arabic using Gemini.
+Generates Instagram Reels scripts in Arabic using Gemini.
 Uses news data + RAG context + previous feedback to produce
-fast-paced, hook-first scripts for 30-60 second vertical videos.
+aesthetic, hook-first scripts for 30-60 second vertical Reels.
 """
 
 import json
@@ -20,11 +20,10 @@ logger = logging.getLogger("tiktok.writer")
 
 
 class Writer(BaseProcessor):
-    """AI script writer for TikTok gaming content."""
+    """AI script writer for Instagram Reels gaming content."""
 
     def __init__(self):
         super().__init__(name="Writer (TikTok)")
-        # was: TikTok Writer")
 
     def run(
         self,
@@ -35,10 +34,10 @@ class Writer(BaseProcessor):
         **kwargs,
     ) -> Dict[str, Any]:
         """
-        Generate a TikTok script.
+        Generate an Instagram Reels script.
 
         Args:
-            content_type: trending_news | game_spotlight | trailer_reaction
+            content_type: trending_news | game_spotlight | hardware_spotlight | trailer_reaction
             news_articles: List of news article dicts
             target_duration: Target video duration in seconds
             max_retries: Number of retry attempts
@@ -52,8 +51,18 @@ class Writer(BaseProcessor):
         )
 
         # Prepare context
+        planned_topic = (kwargs.get("planned_topic") or "").strip()
+        planned_angle = (kwargs.get("planned_angle") or "").strip()
+        planned_visual_hook = (kwargs.get("planned_visual_hook") or "").strip()
+
         news_data = self._format_news(news_articles or [])
         news_ids = [str(a.get("id", "")) for a in (news_articles or []) if a.get("id")]
+
+        if planned_topic and news_data.startswith("No specific news articles"):
+            news_data = (
+                "No specific matched articles were found in DB for this run. "
+                f"Stick to the approved plan topic exactly: {planned_topic}"
+            )
 
         rag_context = self.get_rag_context(
             query=news_data[:500] if news_data else content_type,
@@ -61,6 +70,9 @@ class Writer(BaseProcessor):
         )
         feedback = self.get_previous_feedback(content_type)
         target_words = self.target_word_count(target_duration)
+
+        # Check for revision feedback (from validator loop)
+        revision_feedback = kwargs.get("revision_feedback", "")
 
         # Get prompt template
         prompt_template = WRITER_PROMPTS.get(
@@ -72,7 +84,17 @@ class Writer(BaseProcessor):
             previous_feedback=feedback,
             target_duration=int(target_duration),
             word_count=target_words,
+            planned_topic=planned_topic,
+            planned_angle=planned_angle,
+            planned_visual_hook=planned_visual_hook,
         )
+
+        # Append revision feedback if this is a revision run
+        if revision_feedback:
+            prompt += (
+                "\n\n## ملاحظات المراجع (يجب تطبيقها):\n"
+                f"{revision_feedback}\n"
+            )
 
         # Generate with retries
         script_text = None
@@ -80,9 +102,18 @@ class Writer(BaseProcessor):
             try:
                 raw = self.gemini.generate_text(
                     prompt=prompt,
-                    system_instruction=WRITER_SYSTEM_PROMPT,
+                    system_prompt=WRITER_SYSTEM_PROMPT,
                 )
                 script_text = self.clean_script(raw)
+
+                # Check script ends with complete sentence
+                if script_text and not script_text.rstrip().endswith(('.', '؟', '!', '.')):
+                    logger.warning(
+                        "Attempt %d: Script appears truncated (no ending punctuation), retrying",
+                        attempt + 1,
+                    )
+                    prompt += "\n\nCRITICAL: Your previous output was cut off mid-sentence. Make sure the script ends with a COMPLETE sentence and a period."
+                    continue
 
                 # Validate length
                 word_count = self.count_words(script_text)

@@ -1,9 +1,9 @@
 # -*- coding: utf-8 -*-
 """
-Validator Agent
+Validator Processor
 ===============
-AI quality gate for TikTok scripts.
-Evaluates 7 TikTok-specific criteria using Gemini and returns
+AI quality gate for Instagram Reels scripts.
+Evaluates 7 Instagram-specific criteria using Gemini and returns
 a structured pass/fail decision with improvement suggestions.
 """
 
@@ -23,12 +23,12 @@ logger = logging.getLogger("tiktok.validator")
 
 
 class Validator(BaseProcessor):
-    """AI quality gate for TikTok scripts."""
+    """AI quality gate for Instagram Reels scripts."""
 
-    # Auto-reject threshold
-    MIN_OVERALL_SCORE = 70
-    MIN_HOOK_SCORE = 60
-    MAX_REVISIONS = 2
+    # Auto-reject threshold — 95+ required for approval
+    MIN_OVERALL_SCORE = 95
+    MIN_HOOK_SCORE = 70
+    MAX_REVISIONS = 10
 
     def __init__(self):
         super().__init__(name="Validator (TikTok)")
@@ -42,7 +42,7 @@ class Validator(BaseProcessor):
         **kwargs,
     ) -> Dict[str, Any]:
         """
-        Validate a TikTok script.
+        Validate an Instagram Reels script.
 
         Args:
             script_id: UUID of the script to validate
@@ -64,15 +64,19 @@ class Validator(BaseProcessor):
             content_type=content_type,
             word_count=word_count,
             estimated_duration=f"{est_duration:.1f}",
+            target_duration=int(kwargs.get("target_duration", 45)),
             news_summaries=news_summaries or "Not provided",
+            planned_topic=kwargs.get("planned_topic", ""),
+            planned_angle=kwargs.get("planned_angle", ""),
+            planned_visual_hook=kwargs.get("planned_visual_hook", ""),
         )
 
         try:
             raw = self.gemini.generate_json(
                 prompt=prompt,
-                system_instruction=VALIDATOR_SYSTEM_PROMPT,
+                system_prompt=VALIDATOR_SYSTEM_PROMPT,
             )
-            validation = json.loads(raw)
+            validation = raw if isinstance(raw, dict) else json.loads(raw)
         except (json.JSONDecodeError, Exception) as e:
             logger.error("Validation JSON parse failed: %s", e)
             # Fallback: generate text and try to extract
@@ -82,6 +86,12 @@ class Validator(BaseProcessor):
         scores = validation.get("scores", {})
         overall = validation.get("overall_score", 0)
         approved = validation.get("approved", False)
+        verified_score = validation.get("verified_score", scores.get("accuracy", 0))
+        try:
+            verified_score = int(verified_score)
+        except (TypeError, ValueError):
+            verified_score = int(scores.get("accuracy", 0) or 0)
+        validation["verified_score"] = verified_score
 
         # Enforce hard rules
         hook_score = scores.get("hook_strength", 0)
@@ -123,10 +133,21 @@ class Validator(BaseProcessor):
             (new_status, script_id),
         )
 
+        # Store rejected patterns in RAG so the writer doesn't repeat mistakes
+        if not approved and validation.get("critical_issues"):
+            self._store_rejected_patterns(
+                script_id=script_id,
+                script_text=script_text,
+                content_type=content_type,
+                critical_issues=validation["critical_issues"],
+                overall_score=overall,
+            )
+
         result = {
             "validation_id": validation_id,
             "approved": approved,
             "overall_score": overall,
+            "verified_score": verified_score,
             "scores": scores,
             "critical_issues": validation.get("critical_issues", []),
             "suggestions": validation.get("suggestions", []),
@@ -154,6 +175,11 @@ class Validator(BaseProcessor):
         content_type: str,
         news_summaries: Optional[str] = None,
         writer_agent: Optional[Any] = None,
+        news_articles: Optional[list] = None,
+        target_duration: float = 45.0,
+        planned_topic: str = "",
+        planned_angle: str = "",
+        planned_visual_hook: str = "",
     ) -> Dict[str, Any]:
         """
         Validate with automatic revision attempts.
@@ -168,6 +194,10 @@ class Validator(BaseProcessor):
                 script_text=current_text,
                 content_type=content_type,
                 news_summaries=news_summaries,
+                target_duration=target_duration,
+                planned_topic=planned_topic,
+                planned_angle=planned_angle,
+                planned_visual_hook=planned_visual_hook,
             )
 
             if result["approved"]:
@@ -181,25 +211,75 @@ class Validator(BaseProcessor):
                     result["overall_score"],
                 )
 
-                # Build revision prompt
+                # Build revision feedback from validator issues
                 issues = "\n".join(f"- {i}" for i in result["critical_issues"])
                 suggestions = "\n".join(f"- {s}" for s in result["suggestions"])
+                revision_feedback = (
+                    f"السكريبت السابق حصل على {result['overall_score']}/100.\n\n"
+                    f"## مشاكل يجب حلّها (كل مشكلة = سبب رفض):\n{issues}\n\n"
+                    f"## اقتراحات تحسين:\n{suggestions}\n\n"
+                    f"## النص المرفوض:\n{current_text}\n\n"
+                    f"أعد كتابة السكريبت الكامل من الصفر مع تطبيق كل الملاحظات أعلاه. "
+                    f"لا تنسخ النص السابق — اكتب نسخة جديدة تماماً تحلّ كل المشاكل. "
+                    f"تأكّد أن كل كلمة فيها حرف مشدّد تحمل شدّة، "
+                    f"وأن كل الكلمات عاميّة بسيطة مش فصحى، "
+                    f"وأن السكريبت ينتهي بجملة كاملة."
+                )
 
                 revision_result = writer_agent.run(
                     content_type=content_type,
-                    news_articles=[],
-                    target_duration=45.0,
+                    news_articles=news_articles or [],
+                    target_duration=target_duration,
                     trigger_source="revision",
+                    revision_feedback=revision_feedback,
+                    planned_topic=planned_topic,
+                    planned_angle=planned_angle,
+                    planned_visual_hook=planned_visual_hook,
                 )
                 current_text = revision_result["script_text"]
                 current_id = revision_result["script_id"]
 
         logger.warning("Script failed after %d attempts", self.MAX_REVISIONS + 1)
+        logger.error("Script generation failed after %d attempts — not returning rejected content", self.MAX_REVISIONS + 1)
+        result['generation_failed'] = True
         return result
 
     # ================================================================
     # Helpers
     # ================================================================
+
+    def _store_rejected_patterns(
+        self,
+        script_id: str,
+        script_text: str,
+        content_type: str,
+        critical_issues: list,
+        overall_score: float,
+    ) -> None:
+        """Store rejected script patterns in RAG so the writer avoids them."""
+        try:
+            from database.rag_manager import RAGManager
+            from services.embedding_service import embed_text
+
+            rag = RAGManager()
+            issues_text = "; ".join(critical_issues)
+            feedback = (
+                f"REJECTED PATTERN ({content_type}, score {overall_score:.0f}/100): "
+                f"{issues_text}. "
+                f"Script snippet: {script_text[:300]}"
+            )
+            embedding = embed_text(feedback[:500])
+            rag.store_feedback(
+                script_id=script_id,
+                video_id="",
+                feedback_text=feedback,
+                feedback_type="negative",
+                embedding=embedding,
+                source="validator",
+            )
+            logger.info("Stored rejected pattern in RAG for script %s", script_id[:8])
+        except Exception as e:
+            logger.warning("Failed to store rejected pattern in RAG: %s", e)
 
     @staticmethod
     def _store_validation(

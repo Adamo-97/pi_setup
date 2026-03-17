@@ -2,9 +2,9 @@
 """
 Mattermost Service
 ====================
-Sends TikTok video previews and scripts to Mattermost for approval.
-Rich Markdown messages with interactive approve/reject action buttons
-routed to n8n webhooks.
+Sends TikTok previews and scripts to Mattermost for approval.
+Rich Markdown messages with interactive approve/reject/comment action buttons
+routed to n8n webhooks. Each gate posts to its own dedicated channel.
 
 Mattermost API Reference:
   - POST /api/v4/posts   — Create post (up to 16,383 chars)
@@ -13,6 +13,7 @@ Mattermost API Reference:
 """
 
 import logging
+import os
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -29,16 +30,67 @@ class MattermostService:
         url: str,
         bot_token: str,
         channel_id: str,
-        n8n_base_url: str = "http://192.168.0.11:5678",
+        n8n_base_url: str = "",
+        channel_map: Optional[Dict[str, str]] = None,
     ):
         self.base_url = url.rstrip("/")
         self.bot_token = bot_token
-        self.channel_id = channel_id
-        self.n8n_base_url = n8n_base_url.rstrip("/")
+        self.channel_id = channel_id  # legacy fallback
+        # Per-gate channel routing (gate_name -> channel_id)
+        self.channel_map: Dict[str, str] = channel_map or {}
+        # Allow override via N8N_BASE_URL env var; fallback to Pi's shared n8n
+        resolved = n8n_base_url or os.environ.get("N8N_BASE_URL", "http://192.168.0.11:5678")
+        self.n8n_base_url = resolved.rstrip("/")
         self._headers = {
             "Authorization": f"Bearer {self.bot_token}",
             "Content-Type": "application/json",
         }
+
+    # ================================================================
+    # Channel routing
+    # ================================================================
+
+    GATE_CHANNEL_KEYS = {
+        0: "plan",
+        1: "news",
+        2: "script",
+        3: "voiceover",
+        4: "publish",
+    }
+
+    def _resolve_channel(self, gate_number: Optional[int] = None, channel_key: Optional[str] = None) -> str:
+        """Resolve the correct channel ID for a gate number or channel key."""
+        if channel_key and channel_key in self.channel_map:
+            resolved = self.channel_map[channel_key]
+            if resolved:
+                return resolved
+        if gate_number is not None:
+            key = self.GATE_CHANNEL_KEYS.get(gate_number, "plan")
+            if key in self.channel_map and self.channel_map[key]:
+                return self.channel_map[key]
+        return self.channel_id
+
+    @classmethod
+    def from_settings(cls) -> "MattermostService":
+        """Factory: create from config/settings.py environment."""
+        from config.settings import get_settings
+        s = get_settings()
+        mm = s.mattermost
+        channel_map = {
+            "plan": mm.channel_plan,
+            "news": mm.channel_news,
+            "script": mm.channel_script,
+            "voiceover": mm.channel_voiceover,
+            "footage": mm.channel_footage,
+            "video": mm.channel_video,
+            "publish": mm.channel_publish,
+        }
+        return cls(
+            url=mm.url,
+            bot_token=mm.bot_token,
+            channel_id=mm.channel_id,
+            channel_map=channel_map,
+        )
 
     # ================================================================
     # Core API helpers
@@ -49,10 +101,12 @@ class MattermostService:
         message: str,
         props: Optional[dict] = None,
         file_ids: Optional[list] = None,
-    ) -> bool:
-        """Create a post in the configured Mattermost channel."""
+        channel_id: Optional[str] = None,
+    ) -> Optional[str]:
+        """Create a post in a Mattermost channel. Returns post_id on success, None on failure."""
+        target_channel = channel_id or self.channel_id
         payload: Dict[str, Any] = {
-            "channel_id": self.channel_id,
+            "channel_id": target_channel,
             "message": message,
         }
         if props:
@@ -68,36 +122,38 @@ class MattermostService:
                 timeout=30,
             )
             if resp.status_code in (200, 201):
-                logger.info("Mattermost message sent")
-                return True
+                post_id = resp.json().get("id", "")
+                logger.info("Mattermost message sent -> channel %s (post %s)", target_channel[:8], post_id[:8])
+                return post_id
             else:
                 logger.error(
                     "Mattermost send failed: %d %s", resp.status_code, resp.text[:200]
                 )
-                return False
+                return None
         except Exception as e:
             logger.error("Mattermost send error: %s", e)
-            return False
+            return None
 
-    def _upload_file(self, file_path: str) -> Optional[str]:
+    def _upload_file(self, file_path: str, channel_id: Optional[str] = None) -> Optional[str]:
         """Upload a file and return its Mattermost file ID."""
         path = Path(file_path)
         if not path.is_file():
             logger.error("File not found for upload: %s", file_path)
             return None
 
+        target_channel = channel_id or self.channel_id
         try:
             with open(file_path, "rb") as f:
                 resp = requests.post(
                     f"{self.base_url}/api/v4/files",
                     headers={"Authorization": f"Bearer {self.bot_token}"},
                     files={"files": (path.name, f)},
-                    data={"channel_id": self.channel_id},
+                    data={"channel_id": target_channel},
                     timeout=120,
                 )
             if resp.status_code in (200, 201):
                 file_id = resp.json()["file_infos"][0]["id"]
-                logger.info("File uploaded: %s → %s", path.name, file_id)
+                logger.info("File uploaded: %s -> %s", path.name, file_id)
                 return file_id
             else:
                 logger.error(
@@ -113,12 +169,11 @@ class MattermostService:
     # ================================================================
 
     GATE_LABELS = {
-        0: ("📋", "Gate 0 — خطة المحتوى", "Plan Approval"),
-        1: ("📰", "Gate 1 — جمع الأخبار", "Scrape Approval"),
-        2: ("📝", "Gate 2 — السكريبت", "Script Approval"),
-        3: ("🎙️", "Gate 3 — التعليق الصوتي", "Voiceover Approval"),
-        4: ("🎬", "Gate 4 — تجميع الفيديو", "Video Assembly Approval"),
-        5: ("🚀", "Gate 5 — النشر النهائي", "Final Publish"),
+        0: ("\U0001f4cb", "Gate 0 \u2014 \u062e\u0637\u0629 \u0627\u0644\u0645\u062d\u062a\u0648\u0649", "Plan Approval"),
+        1: ("\U0001f4f0", "Gate 1 \u2014 \u062c\u0645\u0639 \u0627\u0644\u0623\u062e\u0628\u0627\u0631", "Scrape Approval"),
+        2: ("\U0001f4dd", "Gate 2 \u2014 \u0627\u0644\u0633\u0643\u0631\u064a\u0628\u062a", "Script Approval"),
+        3: ("\U0001f399\ufe0f", "Gate 3 \u2014 \u0627\u0644\u062a\u0639\u0644\u064a\u0642 \u0627\u0644\u0635\u0648\u062a\u064a", "Voiceover Approval"),
+        4: ("\U0001f680", "Gate 4 \u2014 \u0627\u0644\u0646\u0634\u0631", "Publish Approval"),
     }
 
     def send_gate_approval(
@@ -129,28 +184,19 @@ class MattermostService:
         run_id: str,
         file_ids: Optional[list] = None,
         budget_status: str = "",
+        file_paths: Optional[List[str]] = None,
     ) -> bool:
         """
         Universal approval gate for Human-in-the-Loop flow.
 
-        Sends a structured Mattermost message with Approve/Reject buttons
-        that trigger n8n webhooks. Used for ALL 6 gates (0-5).
-
-        Gate 5 (Final Publish) includes thumbnail upload instructions.
-
-        Args:
-            gate_number: Gate index (0-5).
-            summary: Human-readable summary of what's being approved.
-            details: Key-value dict rendered as a Markdown table.
-            run_id: Pipeline run UUID for callback routing.
-            file_ids: Optional Mattermost file IDs to attach.
-            budget_status: Budget usage string for display.
-
-        Returns:
-            True if sent successfully.
+        Routes to the correct Mattermost channel based on gate_number.
+        Sends a structured Mattermost message with Approve/Reject/Comment buttons
+        that trigger n8n webhooks.
         """
+        target_channel = self._resolve_channel(gate_number)
+
         emoji, label_ar, label_en = self.GATE_LABELS.get(
-            gate_number, ("🔲", f"Gate {gate_number}", f"Gate {gate_number}")
+            gate_number, ("\U0001f532", f"Gate {gate_number}", f"Gate {gate_number}")
         )
 
         approve_url = (
@@ -161,43 +207,86 @@ class MattermostService:
             f"{self.n8n_base_url}/webhook/tiktok-reject"
             f"?gate={gate_number}&run_id={run_id}&action=reject"
         )
+        comment_url = (
+            f"{self.n8n_base_url}/webhook/tiktok-comment"
+        )
 
-        # Build details table
-        table_rows = "\n".join(f"| **{k}** | {v} |" for k, v in details.items())
+        def rtl_block(text: str) -> str:
+            """Use Unicode RTL mark per line for Mattermost markdown-safe RTL rendering."""
+            cleaned = (text or "").strip()
+            if not cleaned:
+                return ""
+            return "\n".join(f"\u200f{line}" for line in cleaned.splitlines())
+
+        display_details = dict(details or {})
+        script_body = (
+            display_details.pop("script_body", "")
+            or display_details.pop("script_text", "")
+            or display_details.pop("script", "")
+        )
+
+        detail_block = ""
+        if display_details:
+            # Markdown tables require a header row. Use the first real detail row
+            # as header so we keep the old table look without adding a useless row.
+            items = list(display_details.items())
+            first_k, first_v = items[0]
+            body_rows = "\n".join(f"| **{k}** | {v} |" for k, v in items[1:])
+            detail_block = f"| **{first_k}** | {first_v} |\n|:------|:------|\n"
+            if body_rows:
+                detail_block += f"{body_rows}\n"
+            detail_block += "\n"
 
         message = (
             f"### {emoji} {label_ar}\n\n"
             f"**Pipeline Run:** `{run_id[:12]}...`\n\n"
-            f"| الحقل | القيمة |\n"
-            f"|:------|:------|\n"
-            f"{table_rows}\n\n"
+            f"{detail_block}"
         )
 
         if budget_status:
-            message += f"**📊 الميزانية:** {budget_status}\n\n"
+            message += f"**\U0001f4ca \u0627\u0644\u0645\u064a\u0632\u0627\u0646\u064a\u0629:** {budget_status}\n\n"
 
-        message += f"---\n\n{summary}\n\n"
+        if gate_number == 0:
+            message += f"---\n\n{rtl_block(summary)}\n\n"
+        else:
+            message += f"---\n\n{summary}\n\n"
 
-        # Gate 5 — add thumbnail upload instructions
-        if gate_number == 5:
+        if script_body:
             message += (
-                "---\n\n"
-                "### 🖼️ تحميل الصورة المصغرة\n\n"
-                "**لإضافة الصورة المصغرة (Thumbnail):**\n"
-                "1. اضغط **رد** (Reply) على هذه الرسالة\n"
-                "2. أرفق صورة PNG أو JPEG (1080×1920 مثالي)\n"
-                "3. ثم اضغط **موافقة** أدناه\n\n"
-                "n8n سيأخذ الصورة المرفقة تلقائياً من الرد.\n\n"
+                "### \U0001f4dd نص السكريبت\n\n"
+                f"{rtl_block(script_body)}\n\n"
             )
 
-        props = {
-            "attachments": [
-                {
-                    "color": "#2196F3" if gate_number < 5 else "#4CAF50",
-                    "actions": [
+        if gate_number == 4:
+            message += (
+                "---\n\n"
+                "### \U0001f5bc\ufe0f \u062a\u062d\u0645\u064a\u0644 \u0627\u0644\u0641\u064a\u062f\u064a\u0648 \u0648\u0627\u0644\u0635\u0648\u0631\u0629 \u0627\u0644\u0645\u0635\u063a\u0631\u0629\n\n"
+                "**\u0644\u0625\u0636\u0627\u0641\u0629 \u0627\u0644\u0641\u064a\u062f\u064a\u0648 \u0648\u0627\u0644\u0635\u0648\u0631\u0629 \u0627\u0644\u0645\u0635\u063a\u0631\u0629 (Thumbnail):**\n"
+                "1. \u0627\u0636\u063a\u0637 **\u0631\u062f** (Reply) \u0639\u0644\u0649 \u0647\u0630\u0647 \u0627\u0644\u0631\u0633\u0627\u0644\u0629\n"
+                "2. \u0623\u0631\u0641\u0642 \u0627\u0644\u0641\u064a\u062f\u064a\u0648 + \u0635\u0648\u0631\u0629 PNG \u0623\u0648 JPEG (1080\u00d71920 \u0645\u062b\u0627\u0644\u064a)\n"
+                "3. \u062b\u0645 \u0627\u0636\u063a\u0637 **\u0645\u0648\u0627\u0641\u0642\u0629** \u0623\u062f\u0646\u0627\u0647\n\n"
+            )
+
+        # Upload any attached files (audio, video, etc.)
+        uploaded_file_ids = list(file_ids or [])
+        if file_paths:
+            for fp in file_paths:
+                fid = self._upload_file(fp, channel_id=target_channel)
+                if fid:
+                    uploaded_file_ids.append(fid)
+
+        # Comment instructions rendered RTL-safe without raw HTML.
+        message += (
+            "\n"
+            f"{rtl_block('💬 **للتعليق:** أرسل رد (Reply) على هذه الرسالة بملاحظاتك.')}\n"
+            f"{rtl_block('التعليقات تُحفظ في RAG ويتعلم منها النظام.')}\n\n"
+        )
+
+        actions = [
                         {
                             "id": f"approveGate{gate_number}",
-                            "name": "✅ موافقة",
+                            "type": "button",
+                            "name": "\u2705 \u0645\u0648\u0627\u0641\u0642\u0629",
                             "integration": {
                                 "url": approve_url,
                                 "context": {
@@ -210,7 +299,8 @@ class MattermostService:
                         },
                         {
                             "id": f"rejectGate{gate_number}",
-                            "name": "❌ رفض",
+                            "type": "button",
+                            "name": "\u274c \u0631\u0641\u0636",
                             "style": "danger",
                             "integration": {
                                 "url": reject_url,
@@ -222,15 +312,116 @@ class MattermostService:
                                 },
                             },
                         },
-                    ],
+                    ]
+        if gate_number in (0, 1, 2, 4):
+            actions.append(
+                        {
+                            "id": f"commentGate{gate_number}",
+                            "type": "button",
+                            "name": "\U0001f4ac \u062a\u0639\u0644\u064a\u0642",
+                            "integration": {
+                                "url": comment_url,
+                                "context": {
+                                    "action": "comment",
+                                    "gate": gate_number,
+                                    "run_id": run_id,
+                                    "platform": "tiktok",
+                                },
+                            },
+                        },
+            )
+
+        props = {
+            "attachments": [
+                {
+                    "color": "#2196F3" if gate_number < 6 else "#4CAF50",
+                    "actions": actions,
                 }
             ]
         }
 
-        return self._post_message(message, props=props, file_ids=file_ids)
+        return self._post_message(message, props=props, file_ids=uploaded_file_ids, channel_id=target_channel)
 
     # ================================================================
-    # Send approval request
+    # Post-action updates (visual feedback after button click)
+    # ================================================================
+
+    def update_post_actions(
+        self,
+        post_id: str,
+        action: str,
+        gate_number: int,
+        user_name: str = "",
+        comment: str = "",
+    ) -> bool:
+        """
+        Replace the interactive buttons on a gate message with a status banner.
+
+        Called by n8n after the user clicks Approve/Reject. This ensures:
+        - Buttons are removed (prevents double-click)
+        - Visual feedback shows what happened and who did it
+        """
+        if action == "approve":
+            status_text = f"✅ **تمت الموافقة** بواسطة {user_name}" if user_name else "✅ **تمت الموافقة**"
+            color = "#4CAF50"
+        elif action == "reject":
+            status_text = f"❌ **تم الرفض** بواسطة {user_name}" if user_name else "❌ **تم الرفض**"
+            color = "#d00000"
+        else:
+            status_text = f"💬 **تعليق** من {user_name}" if user_name else "💬 **تعليق مُرسَل**"
+            color = "#FF9800"
+
+        if comment:
+            status_text += f"\n> {comment}"
+
+        try:
+            # First, get the current post to preserve the message
+            resp = requests.get(
+                f"{self.base_url}/api/v4/posts/{post_id}",
+                headers=self._headers,
+                timeout=15,
+            )
+            if resp.status_code != 200:
+                logger.error("Failed to get post %s for update: %d", post_id[:8], resp.status_code)
+                return False
+
+            post_data = resp.json()
+
+            # Replace actions with a static status attachment (no buttons)
+            updated_props = {
+                "attachments": [
+                    {
+                        "color": color,
+                        "text": status_text,
+                    }
+                ]
+            }
+
+            # Update the post props to remove buttons
+            update_payload = {
+                "id": post_id,
+                "message": post_data.get("message", ""),
+                "props": updated_props,
+            }
+
+            resp = requests.put(
+                f"{self.base_url}/api/v4/posts/{post_id}",
+                json=update_payload,
+                headers=self._headers,
+                timeout=15,
+            )
+            if resp.status_code == 200:
+                logger.info("Post %s updated: %s gate %d", post_id[:8], action, gate_number)
+                return True
+            else:
+                logger.error("Failed to update post %s: %d %s", post_id[:8], resp.status_code, resp.text[:200])
+                return False
+        except Exception as e:
+            logger.error("Post update error: %s", e)
+            return False
+
+    # ================================================================
+    # Send approval request (legacy - kept for compatibility)
     # ================================================================
 
     def send_approval_request(
@@ -244,33 +435,19 @@ class MattermostService:
         duration: float,
         news_titles: Optional[List[str]] = None,
     ) -> bool:
-        """
-        Send a rich Mattermost message for video approval.
-
-        Full script text is included — no truncation needed
-        (Mattermost supports 16,383 chars vs Slack's 3,000).
-
-        Includes:
-          - Full script text
-          - Validation score
-          - Video metadata
-          - News sources used
-          - Video file attached directly
-          - Approve / Reject action buttons (→ n8n webhooks)
-        """
+        """Send a rich Mattermost message for TikTok approval."""
+        target_channel = self._resolve_channel(channel_key="video")
         approve_url = f"{self.n8n_base_url}/webhook/tiktok-approve"
         reject_url = f"{self.n8n_base_url}/webhook/tiktok-reject"
 
-        # Score emoji
         score_emoji = (
             ":large_green_circle:"
             if validation_score >= 80
             else ":large_yellow_circle:" if validation_score >= 70 else ":red_circle:"
         )
 
-        # Build message — full script, no truncation
         message = (
-            f"### :clapper: TikTok Video Ready — {content_type.replace('_', ' ').title()}\n\n"
+            f"### :camera: TikTok Video Ready \u2014 {content_type.replace('_', ' ').title()}\n\n"
             f"| Field | Value |\n"
             f"|:------|:------|\n"
             f"| **Score** | {score_emoji} {validation_score:.0f}/100 |\n"
@@ -281,15 +458,13 @@ class MattermostService:
             f"**:memo: Script:**\n```\n{script_text}\n```\n"
         )
 
-        # Add news sources if available
         if news_titles:
             sources_text = "\n".join(f"- {t}" for t in news_titles[:5])
             message += f"\n**:newspaper: News Sources:**\n{sources_text}\n"
 
-        # Upload video file if it exists
         file_ids = []
         if video_path and Path(video_path).is_file():
-            file_id = self._upload_file(video_path)
+            file_id = self._upload_file(video_path, channel_id=target_channel)
             if file_id:
                 file_ids.append(file_id)
 
@@ -304,7 +479,8 @@ class MattermostService:
                     "actions": [
                         {
                             "id": "approveTiktok",
-                            "name": "✅ Approve & Publish",
+                            "type": "button",
+                            "name": "\u2705 Approve & Publish",
                             "integration": {
                                 "url": approve_url,
                                 "context": {
@@ -316,7 +492,8 @@ class MattermostService:
                         },
                         {
                             "id": "rejectTiktok",
-                            "name": "❌ Reject",
+                            "type": "button",
+                            "name": "\u274c Reject",
                             "style": "danger",
                             "integration": {
                                 "url": reject_url,
@@ -332,21 +509,71 @@ class MattermostService:
             ]
         }
 
-        return self._post_message(message, props=props, file_ids=file_ids)
+        return bool(self._post_message(message, props=props, file_ids=file_ids, channel_id=target_channel))
+
+    # ================================================================
+    # Generation failed notification
+    # ================================================================
+
+    def send_generation_failed(
+        self, run_id: str, gate_number: int = 2, last_score: int = 0, attempts: int = 0
+    ) -> bool:
+        """Send a generation-failed alert with a retry button."""
+        target_channel = self._resolve_channel(gate_number)
+        retry_url = (
+            f"{self.n8n_base_url}/webhook/tiktok-retry-script"
+            f"?run_id={run_id}&gate={gate_number}&action=retry"
+        )
+        message = (
+            f"### ❌ فشل توليد السكريبت\n\n"
+            f"| التفاصيل | القيمة |\n"
+            f"|:------|:------|\n"
+            f"| **آخر نتيجة** | {last_score}/100 |\n"
+            f"| **عدد المحاولات** | {attempts} |\n"
+            f"| **Run ID** | `{run_id[:12]}...` |\n"
+        )
+        props = {
+            "attachments": [
+                {
+                    "color": "#d00000",
+                    "actions": [
+                        {
+                            "id": "retryScript",
+                            "type": "button",
+                            "name": "🔄 إعادة المحاولة",
+                            "integration": {
+                                "url": retry_url,
+                                "context": {
+                                    "action": "retry",
+                                    "gate": gate_number,
+                                    "run_id": run_id,
+                                    "platform": "tiktok",
+                                },
+                            },
+                        },
+                    ],
+                }
+            ]
+        }
+        return bool(self._post_message(message, props=props, channel_id=target_channel))
 
     # ================================================================
     # Status notifications
     # ================================================================
 
-    def send_status(self, message: str, level: str = "info") -> bool:
-        """Send a simple status message."""
+    def send_status(self, message: str, level: str = "info", channel_key: Optional[str] = None) -> bool:
+        """Send a simple status message to a specific channel."""
         emoji = {
             "info": ":information_source:",
             "success": ":white_check_mark:",
             "warning": ":warning:",
             "error": ":x:",
         }.get(level, ":information_source:")
-        return self._post_message(f"{emoji} **TikTok Pipeline:** {message}")
+        target = self._resolve_channel(channel_key=channel_key) if channel_key else self.channel_id
+        return bool(self._post_message(
+            f"{emoji} **TikTok Pipeline:** {message}",
+            channel_id=target,
+        ))
 
     def send_publish_confirmation(
         self,
@@ -355,6 +582,7 @@ class MattermostService:
         title: str,
     ) -> bool:
         """Send confirmation that video was published to TikTok via Buffer."""
+        target_channel = self._resolve_channel(channel_key="publish")
         message = (
             f"### :rocket: Published to TikTok!\n\n"
             f"| Field | Value |\n"
@@ -363,13 +591,14 @@ class MattermostService:
             f"| **Buffer ID** | `{buffer_update_id[:12]}...` |\n"
             f"| **Video** | `{video_id[:8]}...` |\n"
         )
-        return self._post_message(message)
+        return bool(self._post_message(message, channel_id=target_channel))
 
     def send_error(self, step: str, error: str) -> bool:
-        """Send pipeline error alert."""
+        """Send pipeline error alert to the plan channel."""
+        target_channel = self._resolve_channel(channel_key="plan")
         message = (
             f"### :red_circle: TikTok Pipeline Error\n\n"
             f"**Step:** {step}\n\n"
             f"**Error:**\n```\n{error}\n```"
         )
-        return self._post_message(message)
+        return bool(self._post_message(message, channel_id=target_channel))

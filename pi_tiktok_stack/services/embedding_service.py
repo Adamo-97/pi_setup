@@ -2,10 +2,13 @@
 """
 Embedding Service
 =================
-Thin convenience wrapper for embedding operations.
+Thin wrapper around Gemini embeddings for the Instagram Reels pipeline.
 """
 
+import logging
 from typing import List
+
+logger = logging.getLogger("tiktok.embedding")
 
 _gemini = None
 
@@ -19,17 +22,29 @@ def _get_gemini():
     return _gemini
 
 
-def embed_text(text: str, task_type: str = "RETRIEVAL_DOCUMENT") -> List[float]:
-    return _get_gemini().generate_embedding(text, task_type)
+def embed_text(text: str) -> List[float]:
+    """Generate embedding for a text string."""
+    try:
+        return _get_gemini().generate_embedding(text)
+    except Exception as e:
+        logger.error("embed_text failed after all retries: %s", e)
+        return []
 
 
 def embed_query(text: str) -> List[float]:
-    return embed_text(text, task_type="RETRIEVAL_QUERY")
+    """Alias for embed_text — semantic clarity for search queries."""
+    return embed_text(text)
 
 
 def embed_document(text: str) -> List[float]:
-    return embed_text(text, task_type="RETRIEVAL_DOCUMENT")
+    """Alias for embed_text — semantic clarity for documents."""
+    return embed_text(text)
 
 
 def embed_batch(texts: List[str]) -> List[List[float]]:
-    return _get_gemini().generate_embeddings_batch(texts)
+    """Generate embeddings for a batch of texts."""
+    try:
+        return _get_gemini().generate_embeddings_batch(texts)
+    except Exception as e:
+        logger.error("embed_batch failed after all retries: %s", e)
+        return [[] for _ in texts]

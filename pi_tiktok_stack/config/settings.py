@@ -37,7 +37,7 @@ class ElevenLabsConfig:
     api_key: str = ""
     voice_id: str = ""
     model: str = "eleven_multilingual_v2"
-    output_format: str = "pcm_44100"
+    output_format: str = "mp3_44100_128"
     sample_rate: int = 44100
 
 
@@ -56,7 +56,25 @@ class DatabaseConfig:
 class MattermostConfig:
     url: str = ""
     bot_token: str = ""
-    channel_id: str = ""
+    channel_id: str = ""  # legacy fallback
+    channel_plan: str = ""
+    channel_news: str = ""
+    channel_script: str = ""
+    channel_voiceover: str = ""
+    channel_footage: str = ""
+    channel_video: str = ""
+    channel_publish: str = ""
+
+    def channel_for_gate(self, gate: int) -> str:
+        """Return the Mattermost channel ID for a given gate number."""
+        gate_map = {
+            0: self.channel_plan,
+            1: self.channel_news,
+            2: self.channel_script,
+            3: self.channel_voiceover,
+            4: self.channel_publish,
+        }
+        return gate_map.get(gate, self.channel_id) or self.channel_id
 
 
 @dataclass(frozen=True)
@@ -93,24 +111,40 @@ class SharedRAWGConfig:
 
 
 @dataclass(frozen=True)
+class RAWGConfig:
+    api_key: str = ""
+    base_url: str = "https://api.rawg.io/api"
+    page_size: int = 10
+
+
+@dataclass(frozen=True)
 class N8NConfig:
-    webhook_base: str = "http://localhost:5679/webhook"
+    webhook_base: str = "http://localhost:5680/webhook"
 
 
 @dataclass(frozen=True)
 class NewsConfig:
-    # RSS feeds
+    # RSS feeds — gaming + hardware
     rss_feeds: tuple = (
         "https://www.ign.com/articles.rss",
         "https://kotaku.com/rss",
         "https://www.pcgamer.com/rss/",
         "https://www.gamespot.com/feeds/mashup/",
+        "https://www.tomshardware.com/feeds/all",
+        "https://www.anandtech.com/rss/",
     )
     # SerpApi (Google News)
     serpapi_key: str = ""
     serpapi_engine: str = "google_news"
-    # Reddit
-    reddit_subreddits: tuple = ("gaming", "Games", "pcgaming")
+    # Reddit — gaming + hardware subreddits
+    reddit_subreddits: tuple = (
+        "gaming",
+        "Games",
+        "pcgaming",
+        "hardware",
+        "buildapc",
+        "nvidia",
+    )
     reddit_user_agent: str = "pi_tiktok_stack/1.0"
     # Scraping limits
     max_articles_per_source: int = 15
@@ -165,7 +199,7 @@ CONTENT_TYPES: Dict[str, ContentTypeConfig] = {
     "trending_news": ContentTypeConfig(
         name="trending_news",
         schedule_type="daily",
-        description="Fast-paced trending gaming news roundup",
+        description="Fast-paced trending gaming & hardware news roundup",
         target_duration=45,
     ),
     "game_spotlight": ContentTypeConfig(
@@ -173,6 +207,12 @@ CONTENT_TYPES: Dict[str, ContentTypeConfig] = {
         schedule_type="event",
         description="Deep spotlight on a single hot game",
         target_duration=60,
+    ),
+    "hardware_spotlight": ContentTypeConfig(
+        name="hardware_spotlight",
+        schedule_type="event",
+        description="GPU/CPU/console hardware reveal or benchmark spotlight",
+        target_duration=50,
     ),
     "trailer_reaction": ContentTypeConfig(
         name="trailer_reaction",
@@ -218,6 +258,8 @@ class _Settings:
             api_key=e("ELEVENLABS_API_KEY", ""),
             voice_id=e("ELEVENLABS_VOICE_ID", ""),
             model=e("ELEVENLABS_MODEL", "eleven_multilingual_v2"),
+            output_format=e("ELEVENLABS_OUTPUT_FORMAT", "mp3_44100_128"),
+            sample_rate=int(e("ELEVENLABS_SAMPLE_RATE", "44100")),
         )
         self.database = DatabaseConfig(
             host=e("DB_HOST", "localhost"),
@@ -230,16 +272,26 @@ class _Settings:
             url=e("MATTERMOST_URL", ""),
             bot_token=e("MATTERMOST_BOT_TOKEN", ""),
             channel_id=e("MATTERMOST_CHANNEL_ID", ""),
+            channel_plan=e("MATTERMOST_CHANNEL_PLAN_ID", ""),
+            channel_news=e("MATTERMOST_CHANNEL_NEWS_ID", ""),
+            channel_script=e("MATTERMOST_CHANNEL_SCRIPT_ID", ""),
+            channel_voiceover=e("MATTERMOST_CHANNEL_VOICEOVER_ID", ""),
+            channel_footage=e("MATTERMOST_CHANNEL_FOOTAGE_ID", ""),
+            channel_video=e("MATTERMOST_CHANNEL_VIDEO_ID", ""),
+            channel_publish=e("MATTERMOST_CHANNEL_PUBLISH_ID", ""),
         )
         self.buffer = BufferConfig(
             access_token=e("BUFFER_ACCESS_TOKEN", ""),
             profile_id=e("BUFFER_PROFILE_ID", ""),
         )
         self.n8n = N8NConfig(
-            webhook_base=e("N8N_WEBHOOK_BASE", "http://localhost:5679/webhook"),
+            webhook_base=e("N8N_WEBHOOK_BASE", "http://localhost:5680/webhook"),
         )
         self.news = NewsConfig(
             serpapi_key=e("SERPAPI_KEY", ""),
+        )
+        self.rawg = RAWGConfig(
+            api_key=e("RAWG_API_KEY", ""),
         )
         self.video = VideoConfig()
         self.paths = PathsConfig()
@@ -277,3 +329,8 @@ class _Settings:
 
 
 settings = _Settings()
+
+
+def get_settings() -> _Settings:
+    """Return the global settings singleton."""
+    return settings

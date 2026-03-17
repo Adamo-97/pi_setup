@@ -20,7 +20,7 @@ Raspberry Pi 5 — stack index & operations cheatsheet.
 | `pi_instagram_stack` | PostgreSQL + Redis — Instagram Reels pipeline | ✅ Yes |
 | `pi_command_center` | Homepage + Uptime Kuma — dashboard & alerts | ❌ No |
 | `pi_nextcloud_stack` | Nextcloud + PostgreSQL + Redis + Caddy — cloud storage | ❌ No |
-| `pi_tiktok_stack` | n8n + PostgreSQL + Redis — TikTok pipeline | ❌ No |
+| `pi_tiktok_stack` | n8n + PostgreSQL + Redis — TikTok pipeline | ✅ Yes |
 | `pi_x_stack` | n8n + PostgreSQL + Redis — X/Twitter pipeline | ❌ No |
 | `pi_youtube_stack` | n8n + PostgreSQL + Redis — YouTube pipeline (in progress) | ❌ No |
 

@@ -5,7 +5,8 @@ from config.prompts.loader import skill
 WRITER_SYSTEM_PROMPT: str = skill("writer", section="system")
 
 WRITER_PROMPTS: dict[str, str] = {
-    "trending_news":    skill("writer_trending_news"),
-    "game_spotlight":   skill("writer_game_spotlight"),
-    "trailer_reaction": skill("writer_trailer_reaction"),
+    "trending_news":       skill("writer_trending_news"),
+    "game_spotlight":      skill("writer_game_spotlight"),
+    "hardware_spotlight":  skill("writer_hardware_spotlight"),
+    "trailer_reaction":    skill("writer_trailer_reaction"),
 }

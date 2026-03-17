@@ -3,7 +3,7 @@
 """
 Step 1: Scrape News
 ===================
-Scrapes trending gaming news from RSS, Google News, and Reddit.
+Scrapes trending gaming & hardware news from RSS, Google News, and Reddit.
 Stores new articles in the database for script generation.
 
 Usage:
@@ -11,7 +11,9 @@ Usage:
 """
 
 import argparse
+import ast
 import logging
+import re
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -30,12 +32,44 @@ logging.basicConfig(
 logger = logging.getLogger("pipeline.scrape_news")
 
 
-def main(source: str = "all") -> dict:
+def _parse_game_slugs(games: str) -> list[str]:
+    """Parse game slugs from CSV, JSON list, or Python list repr."""
+    text = (games or "").strip()
+    if not text:
+        return []
+
+    raw_items = []
+    if text.startswith("[") and text.endswith("]"):
+        try:
+            parsed = ast.literal_eval(text)
+            if isinstance(parsed, list):
+                raw_items = parsed
+        except (ValueError, SyntaxError):
+            raw_items = []
+
+    if not raw_items:
+        raw_items = text.split(",")
+
+    normalized = []
+    for item in raw_items:
+        slug = str(item).strip().strip("'\"[](){}")
+        slug = slug.lower().replace("_", "-")
+        slug = re.sub(r"[^a-z0-9-]+", "-", slug)
+        slug = re.sub(r"-+", "-", slug).strip("-")
+        if slug:
+            normalized.append(slug)
+
+    return list(dict.fromkeys(normalized))
+
+
+def main(source: str = "all", topic: str = "", games: str = "") -> dict:
     """
     Scrape news from specified sources.
 
     Args:
         source: 'all', 'rss', 'google', or 'reddit'
+        topic: optional topic to focus the scraping on
+        games: optional comma-separated game slugs from Gate 0 plan
 
     Returns:
         dict with counts and status
@@ -43,7 +77,13 @@ def main(source: str = "all") -> dict:
     settings = get_settings()
     scraper = NewsScraper()
 
-    logger.info("=== Step 1: Scrape News (source: %s) ===", source)
+    game_slugs = _parse_game_slugs(games)
+    logger.info(
+        "=== Step 1: Scrape News (source: %s, topic: %s, games: %s) ===",
+        source,
+        topic or "all",
+        ",".join(game_slugs) if game_slugs else "none",
+    )
 
     # Record pipeline run
     run_id = _start_pipeline_run("scrape_news")
@@ -52,11 +92,13 @@ def main(source: str = "all") -> dict:
         if source == "rss":
             articles = scraper.scrape_rss()
         elif source == "google":
-            articles = scraper.scrape_google_news()
+            articles = scraper.scrape_google_news(query=f"{topic} gaming" if topic else "gaming hardware news")
         elif source == "reddit":
             articles = scraper.scrape_reddit()
+        elif source == "rawg":
+            articles = scraper.scrape_rawg(topic=topic, game_slugs=game_slugs)
         else:
-            articles = scraper.scrape_all()
+            articles = scraper.scrape_all(topic=topic, game_slugs=game_slugs)
 
         # Store in database
         stored = scraper.store_articles(articles)
@@ -64,11 +106,24 @@ def main(source: str = "all") -> dict:
         # Count available unused articles
         unused = scraper.get_unused_articles(limit=100)
 
+        # Build detailed article summaries for gate notification
+        article_details = []
+        for a in articles[:10]:
+            article_details.append({
+                "title": a.get("title", "N/A"),
+                "source": a.get("source", "unknown"),
+                "summary": (a.get("summary", "") or "")[:200],
+                "source_url": a.get("source_url", ""),
+            })
+
         result = {
             "scraped": len(articles),
             "stored": stored,
             "total_unused": len(unused),
+            "articles": article_details,
             "source": source,
+            "topic": topic,
+            "game_slugs": game_slugs,
             "timestamp": datetime.now().isoformat(),
         }
 
@@ -117,12 +172,18 @@ def _finish_pipeline_run(run_id: str, status: str, details: dict = None):
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Scrape gaming news")
+    import json as _json
+
+    parser = argparse.ArgumentParser(description="Scrape gaming & hardware news")
     parser.add_argument(
         "--source",
-        choices=["all", "rss", "google", "reddit"],
+        choices=["all", "rss", "google", "reddit", "rawg"],
         default="all",
         help="News source to scrape",
     )
+    parser.add_argument("--run-id", default=None, help="n8n run ID (ignored, for tracking)")
+    parser.add_argument("--topic", default="", help="Focus scraping on this topic")
+    parser.add_argument("--games", default="", help="Comma-separated planned game slugs")
     args = parser.parse_args()
-    main(source=args.source)
+    result = main(source=args.source, topic=args.topic, games=args.games)
+    print(_json.dumps(result, ensure_ascii=False))

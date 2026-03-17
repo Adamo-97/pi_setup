@@ -3,8 +3,8 @@
 """
 Step 2: Generate Script
 =======================
-Uses the Writer to generate a TikTok script from scraped news.
-Picks top unused articles and generates an Arabic gaming script.
+Uses the Writer to generate an Instagram Reels script from scraped news.
+Picks top unused articles and generates an Arabic gaming/hardware script.
 
 Usage:
     python -m pipeline.step2_generate_script [--type trending_news]
@@ -30,22 +30,37 @@ logging.basicConfig(
 logger = logging.getLogger("pipeline.generate_script")
 
 
-def main(content_type: str = "trending_news", duration: float = 45.0) -> dict:
+def main(
+    content_type: str = "trending_news",
+    duration: float = 45.0,
+    topic: str = "",
+    angle: str = "",
+    visual_hook: str = "",
+) -> dict:
     """
-    Generate a TikTok script.
+    Generate an Instagram Reels script.
 
     Args:
-        content_type: trending_news | game_spotlight | trailer_reaction
+        content_type: trending_news | game_spotlight | hardware_spotlight | trailer_reaction
         duration: Target video duration in seconds
 
     Returns:
         dict with script_id, script_text, word_count, etc.
     """
-    logger.info("=== Step 2: Generate Script (%s, %.0fs) ===", content_type, duration)
+    content_type = _normalize_content_type(content_type)
+    logger.info(
+        "=== Step 2: Generate Script (%s, %.0fs, topic=%s) ===",
+        content_type,
+        duration,
+        topic or "auto",
+    )
 
     # Get unused news articles
     scraper = NewsScraper()
-    articles = scraper.get_unused_articles(limit=5)
+    if topic:
+        articles = scraper.get_unused_articles_for_topic(topic=topic, limit=5)
+    else:
+        articles = scraper.get_unused_articles(limit=5)
 
     if not articles and content_type == "trending_news":
         logger.warning(
@@ -71,6 +86,9 @@ def main(content_type: str = "trending_news", duration: float = 45.0) -> dict:
         news_articles=article_dicts,
         target_duration=duration,
         trigger_source="pipeline",
+        planned_topic=topic,
+        planned_angle=angle,
+        planned_visual_hook=visual_hook,
     )
 
     # Mark used articles
@@ -98,11 +116,35 @@ def main(content_type: str = "trending_news", duration: float = 45.0) -> dict:
     return result
 
 
+def _normalize_content_type(content_type: str) -> str:
+    normalized = (content_type or "").strip().lower()
+    aliases = {
+        "trending_news": "trending_news",
+        "game_spotlight": "game_spotlight",
+        "hardware_spotlight": "hardware_spotlight",
+        "trailer_reaction": "trailer_reaction",
+        "game_highlights": "trending_news",
+        "visual_showcase": "game_spotlight",
+        "tips_tricks": "trending_news",
+    }
+    return aliases.get(normalized, "trending_news")
+
+
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Generate TikTok script")
+    parser = argparse.ArgumentParser(description="Generate Instagram Reels script")
     parser.add_argument("--type", default="trending_news", help="Content type")
     parser.add_argument(
         "--duration", type=float, default=45.0, help="Target duration (s)"
     )
+    parser.add_argument("--topic", default="", help="Approved plan topic")
+    parser.add_argument("--angle", default="", help="Approved plan angle")
+    parser.add_argument("--visual-hook", default="", help="Approved opening visual hook")
+    parser.add_argument("--run-id", default=None, help="n8n run ID (ignored, for tracking)")
     args = parser.parse_args()
-    main(content_type=args.type, duration=args.duration)
+    main(
+        content_type=args.type,
+        duration=args.duration,
+        topic=args.topic,
+        angle=args.angle,
+        visual_hook=args.visual_hook,
+    )
