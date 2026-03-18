@@ -24,7 +24,7 @@ from config.prompts.metadata_prompts import (
     METADATA_SYSTEM_PROMPT,
     METADATA_GENERATION_PROMPT,
 )
-from config.settings import get_content_type
+from config.settings import get_content_type, settings
 from database.connection import execute_query
 
 logger = logging.getLogger(__name__)
@@ -47,6 +47,10 @@ class Metadata(BaseProcessor):
     @property
     def processor_name(self) -> str:
         return "Metadata Agent"
+
+    def __init__(self):
+        super().__init__()
+        self._task_model = settings.gemini.model_writer  # SEO uses pro model
 
     def execute(
         self,
@@ -118,6 +122,7 @@ class Metadata(BaseProcessor):
             prompt=prompt,
             system_prompt=METADATA_SYSTEM_PROMPT,
             temperature=0.4,
+            model_override=self._task_model,
         )
 
         # ------------------------------------------------------------------

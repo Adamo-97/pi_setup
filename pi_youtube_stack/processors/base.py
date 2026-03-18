@@ -40,6 +40,7 @@ class BaseProcessor(ABC):
         self.gemini = GeminiService()
         self.rag = RAGManager()
         self._run_id: Optional[str] = None
+        self._task_model = None  # subclasses set via settings.gemini.model_*
 
     @property
     @abstractmethod

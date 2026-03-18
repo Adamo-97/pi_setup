@@ -35,6 +35,7 @@ Output (stdout JSON):
 import argparse
 import json
 import logging
+import os
 import sys
 from datetime import date
 from pathlib import Path
@@ -75,7 +76,7 @@ def get_games_from_db(
     y = year or today.year
     m = month or today.month
 
-    if content_type == "monthly_releases":
+    if content_type in ("monthly_releases", "monthly_games"):
         query = """
             SELECT * FROM games
             WHERE EXTRACT(YEAR FROM release_date) = %s
@@ -84,7 +85,7 @@ def get_games_from_db(
         """
         return execute_query(query, (y, m)) or []
 
-    elif content_type == "upcoming_games":
+    elif content_type in ("upcoming_games", "industry_news"):
         query = """
             SELECT * FROM games
             WHERE release_date > CURRENT_DATE
@@ -93,7 +94,7 @@ def get_games_from_db(
         """
         return execute_query(query) or []
 
-    elif content_type == "aaa_review":
+    elif content_type in ("aaa_review", "game_review"):
         # For reviews, we typically target a specific game
         # Return the most recently added game as fallback
         query = """
@@ -120,7 +121,8 @@ def main():
     parser.add_argument(
         "--type",
         required=False,
-        choices=["monthly_releases", "aaa_review", "upcoming_games"],
+        choices=["monthly_releases", "aaa_review", "upcoming_games",
+                 "monthly_games", "game_review", "industry_news"],
         help="Content type to generate.",
     )
     parser.add_argument(
@@ -158,7 +160,8 @@ def main():
             target_duration = stdin_data.get("target_duration", args.duration)
             trigger = stdin_data.get("trigger_source", args.trigger)
         else:
-            if not args.type:
+            content_type = args.type or os.environ.get("PROPOSED_CONTENT_TYPE")
+            if not content_type:
                 print(
                     json.dumps(
                         {
@@ -169,7 +172,6 @@ def main():
                 )
                 sys.exit(1)
 
-            content_type = args.type
             target_duration = args.duration
             trigger = args.trigger
             game_title = None

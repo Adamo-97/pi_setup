@@ -6,13 +6,18 @@ def main():
     run_id, stdout_file = sys.argv[1], sys.argv[2]
     state_file = f"/tmp/pipeline_state_{run_id}.json"
     with open(stdout_file) as f:
-        lines = f.read().strip().split("\n")
+        content = f.read().strip()
     data = {}
-    for line in reversed(lines):
-        line = line.strip()
-        if line.startswith("{"):
-            try: data = json.loads(line); break
-            except json.JSONDecodeError: continue
+    # Try parsing the entire content as JSON first (handles pretty-printed output)
+    try:
+        data = json.loads(content)
+    except json.JSONDecodeError:
+        # Fall back to finding a single-line JSON
+        for line in reversed(content.split("\n")):
+            line = line.strip()
+            if line.startswith("{"):
+                try: data = json.loads(line); break
+                except json.JSONDecodeError: continue
     if not data: return
     state = {}
     try:

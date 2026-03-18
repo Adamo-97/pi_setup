@@ -29,7 +29,7 @@ from config.prompts.validator_prompts import (
     VALIDATOR_SYSTEM_PROMPT,
     VALIDATOR_REVIEW_PROMPT,
 )
-from config.settings import get_content_type
+from config.settings import get_content_type, settings
 from database.connection import execute_query
 from database.models import ValidationResult, ValidationScores
 
@@ -59,6 +59,10 @@ class Validator(BaseProcessor):
     @property
     def processor_name(self) -> str:
         return "Validator Agent"
+
+    def __init__(self):
+        super().__init__()
+        self._task_model = settings.gemini.model_validator
 
     def execute(
         self,
@@ -122,6 +126,7 @@ class Validator(BaseProcessor):
             prompt=prompt,
             system_prompt=VALIDATOR_SYSTEM_PROMPT,
             temperature=0.2,  # Low temp for consistent evaluation
+            model_override=self._task_model,
         )
 
         # ------------------------------------------------------------------

@@ -23,6 +23,7 @@ Output (stdout JSON):
 import argparse
 import json
 import logging
+import os
 import sys
 from datetime import date
 from pathlib import Path
@@ -144,6 +145,19 @@ def fetch_game_for_review(game_slug: str) -> dict:
         }
 
 
+# Map planner content types to fetch strategies
+CONTENT_TYPE_MAP = {
+    "monthly_releases": "monthly_releases",
+    "monthly_games": "monthly_releases",
+    "upcoming_games": "upcoming_games",
+    "aaa_review": "aaa_review",
+    "game_review": "aaa_review",
+    "industry_news": "upcoming_games",  # fetch trending/upcoming games as context
+}
+
+ALL_CONTENT_TYPES = list(CONTENT_TYPE_MAP.keys())
+
+
 def main():
     """CLI entry point."""
     parser = argparse.ArgumentParser(
@@ -151,8 +165,8 @@ def main():
     )
     parser.add_argument(
         "--type",
-        required=True,
-        choices=["monthly_releases", "upcoming_games", "aaa_review"],
+        required=False,
+        choices=ALL_CONTENT_TYPES,
         help="Content type to fetch games for.",
     )
     parser.add_argument(
@@ -173,12 +187,16 @@ def main():
 
     args = parser.parse_args()
 
+    # Fall back to PROPOSED_CONTENT_TYPE env var (set by pipeline.read_state)
+    content_type = args.type or os.environ.get("PROPOSED_CONTENT_TYPE", "upcoming_games")
+    fetch_type = CONTENT_TYPE_MAP.get(content_type, "upcoming_games")
+
     try:
-        if args.type == "monthly_releases":
+        if fetch_type == "monthly_releases":
             result = fetch_monthly_releases(args.year, args.month, args.max_pages)
-        elif args.type == "upcoming_games":
+        elif fetch_type == "upcoming_games":
             result = fetch_upcoming_games(args.max_pages)
-        elif args.type == "aaa_review":
+        elif fetch_type == "aaa_review":
             if not args.game_slug:
                 result = {
                     "success": False,
@@ -187,7 +205,10 @@ def main():
             else:
                 result = fetch_game_for_review(args.game_slug)
         else:
-            result = {"success": False, "error": f"Unknown type: {args.type}"}
+            result = {"success": False, "error": f"Unknown type: {content_type}"}
+
+        # Preserve the original content type in output
+        result["content_type"] = content_type
 
     except Exception as exc:
         logger.exception("Fatal error in fetch_game_data")

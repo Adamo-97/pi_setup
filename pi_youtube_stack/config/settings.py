@@ -49,10 +49,13 @@ class GeminiConfig:
 
     api_key: str
     model: str
+    model_planner: str
+    model_scraper: str
+    model_validator: str
+    model_writer: str
+    embedding_model: str
     temperature: float
     max_output_tokens: int
-    top_p: float
-    top_k: int
 
 
 @dataclass(frozen=True)
@@ -188,11 +191,14 @@ class ContentTypeConfig:
 def _build_gemini() -> GeminiConfig:
     return GeminiConfig(
         api_key=_require_env("GEMINI_API_KEY"),
-        model=os.getenv("GEMINI_MODEL", "gemini-2.5-pro"),
+        model=os.getenv("GEMINI_MODEL", "gemini-3.1-pro-preview"),
+        model_planner=os.getenv("GEMINI_MODEL_PLANNER", "gemini-2.5-flash"),
+        model_scraper=os.getenv("GEMINI_MODEL_SCRAPER", "gemini-2.5-flash"),
+        model_validator=os.getenv("GEMINI_MODEL_VALIDATOR", "gemini-2.5-flash"),
+        model_writer=os.getenv("GEMINI_MODEL_WRITER", "gemini-3.1-pro-preview"),
+        embedding_model=os.getenv("GEMINI_EMBEDDING_MODEL", "models/gemini-embedding-001"),
         temperature=float(os.getenv("GEMINI_TEMPERATURE", "0.8")),
         max_output_tokens=int(os.getenv("GEMINI_MAX_TOKENS", "8192")),
-        top_p=float(os.getenv("GEMINI_TOP_P", "0.95")),
-        top_k=int(os.getenv("GEMINI_TOP_K", "40")),
     )
 
 

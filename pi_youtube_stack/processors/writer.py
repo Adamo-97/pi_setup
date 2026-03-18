@@ -22,7 +22,7 @@ from typing import Optional
 
 from processors.base import BaseProcessor
 from config.prompts.writer_prompts import WRITER_SYSTEM_PROMPT, get_writer_prompt
-from config.settings import get_content_type
+from config.settings import get_content_type, settings
 from database.connection import execute_query
 
 logger = logging.getLogger(__name__)
@@ -44,6 +44,10 @@ class Writer(BaseProcessor):
     @property
     def processor_name(self) -> str:
         return "Writer Agent"
+
+    def __init__(self):
+        super().__init__()
+        self._task_model = settings.gemini.model_writer
 
     def execute(
         self,
@@ -117,17 +121,18 @@ class Writer(BaseProcessor):
             "word_count": target_word_count,
         }
 
-        if content_type == "monthly_releases":
+        if content_type in ("monthly_releases", "monthly_games"):
             prompt_kwargs["month_name"] = month_name
             prompt_kwargs["year"] = now.year
             prompt_kwargs["games_data"] = formatted_games
-        elif content_type == "aaa_review":
+        elif content_type in ("aaa_review", "game_review"):
             prompt_kwargs["game_title"] = game_title or games_data[0].get(
                 "title", "Unknown"
             )
             prompt_kwargs["game_data"] = formatted_games
-        elif content_type == "upcoming_games":
+        elif content_type in ("upcoming_games", "industry_news"):
             prompt_kwargs["games_data"] = formatted_games
+            prompt_kwargs["news_data"] = formatted_games  # industry_news template uses news_data
 
         prompt = prompt_template.format(**prompt_kwargs)
 
@@ -143,6 +148,7 @@ class Writer(BaseProcessor):
             script_text = self.gemini.generate_text(
                 prompt=prompt,
                 system_prompt=WRITER_SYSTEM_PROMPT,
+                model_override=self._task_model,
             )
 
             # Check for duplicates
@@ -173,11 +179,11 @@ class Writer(BaseProcessor):
         estimated_duration = self.estimate_duration(word_count)
 
         # Build title
-        if content_type == "monthly_releases":
+        if content_type in ("monthly_releases", "monthly_games"):
             title = f"إصدارات شهر {month_name} {now.year} — أبرز الألعاب الجديدة"
-        elif content_type == "aaa_review":
+        elif content_type in ("aaa_review", "game_review"):
             title = f"مراجعة {game_title or 'لعبة'} — هل تستحق؟"
-        elif content_type == "upcoming_games":
+        elif content_type in ("upcoming_games", "industry_news"):
             title = f"ألعاب قادمة يجب أن تترقبوها — {month_name} {now.year}"
         else:
             title = f"{ct_config.display_name} — {now.strftime('%Y-%m')}"
@@ -194,7 +200,7 @@ class Writer(BaseProcessor):
                 INSERT INTO generated_scripts
                     (id, content_type, title, script_text, word_count,
                      target_duration, game_ids, status, version)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, 'draft', 1)
+                VALUES (%s, %s, %s, %s, %s, %s, %s::uuid[], 'draft', 1)
                 """,
                 (
                     script_id,

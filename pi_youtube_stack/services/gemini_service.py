@@ -1,265 +1,218 @@
 # -*- coding: utf-8 -*-
 """
-Gemini API Service
-====================
-Wrapper for Google's Gemini API, handling:
-  - Text generation (for Writer, Validator, Metadata agents)
-  - Embedding generation (for RAG storage & retrieval)
-  - Retry logic with exponential backoff
-  - Clean error handling
-
-Uses the google-generativeai SDK.
+Gemini Service
+==============
+Direct REST wrapper for Google Gemini API.
+Uses requests instead of the deprecated google.generativeai SDK
+to avoid hangs on ARM/Pi with newer models (gemini-3.x).
 """
 
 import json
 import logging
+import random
+import re
 import time
-from typing import Optional
+from typing import Any, Dict, List, Optional
 
-import google.generativeai as genai
+import requests
 
 from config.settings import settings
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("youtube.gemini")
+
+_BASE = "https://generativelanguage.googleapis.com/v1beta"
 
 
 class GeminiService:
-    """
-    Google Gemini API client for text generation and embeddings.
-
-    Usage:
-        service = GeminiService()
-        response = service.generate_text("Your prompt here", system_prompt="...")
-        embedding = service.generate_embedding("Text to embed")
-    """
-
-    # Retry configuration
-    MAX_RETRIES = 3
-    BASE_DELAY = 2  # seconds
+    """Google Gemini AI client for the YouTube pipeline (REST)."""
 
     def __init__(self):
-        """Initialize the Gemini client with API key from settings."""
         cfg = settings.gemini
-        genai.configure(api_key=cfg.api_key)
+        self._api_key = cfg.api_key
+        self._model = cfg.model
+        self._embed_model = cfg.embedding_model
+        self._temperature = cfg.temperature
+        self._max_tokens = cfg.max_output_tokens
+        self._timeout = 120  # seconds per API call
 
-        # Configure the generative model
-        self.model = genai.GenerativeModel(
-            model_name=cfg.model,
-            generation_config=genai.GenerationConfig(
-                temperature=cfg.temperature,
-                max_output_tokens=cfg.max_output_tokens,
-                top_p=cfg.top_p,
-                top_k=cfg.top_k,
-            ),
-        )
-        self.model_name = cfg.model
-        logger.info("GeminiService initialized with model: %s", cfg.model)
+    # ================================================================
+    # Text generation
+    # ================================================================
 
     def generate_text(
         self,
         prompt: str,
         system_prompt: Optional[str] = None,
         temperature: Optional[float] = None,
-        max_tokens: Optional[int] = None,
+        max_retries: int = 5,
+        model_override: Optional[str] = None,
     ) -> str:
-        """
-        Generate text using the Gemini model.
+        """Generate text using Gemini REST API."""
+        temp = temperature if temperature is not None else self._temperature
+        model = model_override or self._model
 
-        Args:
-            prompt: The user/generation prompt.
-            system_prompt: Optional system instruction to set agent behavior.
-            temperature: Override default temperature for this call.
-            max_tokens: Override default max tokens for this call.
-
-        Returns:
-            The generated text string.
-
-        Raises:
-            RuntimeError: If all retries are exhausted.
-        """
-        # Build generation config overrides if provided
-        gen_config_overrides = {}
-        if temperature is not None:
-            gen_config_overrides["temperature"] = temperature
-        if max_tokens is not None:
-            gen_config_overrides["max_output_tokens"] = max_tokens
-
-        # Build the model with system instruction if provided
-        model = self.model
+        contents = []
         if system_prompt:
-            cfg = settings.gemini
-            model = genai.GenerativeModel(
-                model_name=cfg.model,
-                system_instruction=system_prompt,
-                generation_config=genai.GenerationConfig(
-                    temperature=temperature or cfg.temperature,
-                    max_output_tokens=max_tokens or cfg.max_output_tokens,
-                    top_p=cfg.top_p,
-                    top_k=cfg.top_k,
-                ),
+            contents.append({"role": "user", "parts": [{"text": system_prompt}]})
+            contents.append(
+                {"role": "model", "parts": [{"text": "understood, I will follow these instructions."}]}
             )
+        contents.append({"role": "user", "parts": [{"text": prompt}]})
 
-        # Retry loop with exponential backoff
-        last_error = None
-        for attempt in range(1, self.MAX_RETRIES + 1):
+        payload = {
+            "contents": contents,
+            "generationConfig": {
+                "temperature": temp,
+                "maxOutputTokens": self._max_tokens,
+            },
+        }
+
+        url = f"{_BASE}/models/{model}:generateContent?key={self._api_key}"
+
+        for attempt in range(max_retries + 1):
             try:
-                logger.debug(
-                    "Gemini generate attempt %d/%d (prompt_len=%d)",
-                    attempt,
-                    self.MAX_RETRIES,
-                    len(prompt),
-                )
-
-                response = model.generate_content(prompt)
-
-                # Check for blocked content
-                if not response.candidates:
-                    raise RuntimeError(
-                        "Gemini returned no candidates — content may have been blocked. "
-                        f"Prompt feedback: {response.prompt_feedback}"
-                    )
-
-                text = response.text.strip()
-                logger.info(
-                    "Gemini generated %d chars on attempt %d.", len(text), attempt
-                )
+                resp = requests.post(url, json=payload, timeout=self._timeout)
+                if resp.status_code == 429 or resp.status_code == 503:
+                    retry_after = resp.headers.get("Retry-After")
+                    if retry_after and resp.status_code == 429:
+                        time.sleep(float(retry_after))
+                    else:
+                        time.sleep(2**attempt + random.uniform(0, 1))
+                    if attempt < max_retries:
+                        logger.warning("Gemini %d on attempt %d, retrying...", resp.status_code, attempt + 1)
+                        continue
+                    resp.raise_for_status()
+                elif resp.status_code >= 400:
+                    resp.raise_for_status()
+                data = resp.json()
+                candidates = data.get("candidates", [])
+                if not candidates:
+                    err = data.get("error", {}).get("message", "No candidates returned")
+                    raise RuntimeError(f"Gemini returned no candidates: {err}")
+                finish_reason = candidates[0].get("finishReason", "STOP")
+                text = candidates[0]["content"]["parts"][0]["text"]
+                if finish_reason == "MAX_TOKENS" and attempt < max_retries:
+                    logger.warning("Gemini response truncated (MAX_TOKENS) on attempt %d, retrying...", attempt + 1)
+                    time.sleep(2**attempt + random.uniform(0, 1))
+                    continue
                 return text
+            except requests.exceptions.HTTPError:
+                raise
+            except Exception as e:
+                logger.warning("Gemini attempt %d failed: %s", attempt + 1, e)
+                if attempt < max_retries:
+                    time.sleep(2**attempt + random.uniform(0, 1))
+                else:
+                    raise
 
-            except Exception as exc:
-                last_error = exc
-                delay = self.BASE_DELAY * (2 ** (attempt - 1))
-                logger.warning(
-                    "Gemini attempt %d failed: %s — retrying in %ds...",
-                    attempt,
-                    str(exc)[:200],
-                    delay,
-                )
-                time.sleep(delay)
-
-        raise RuntimeError(
-            f"Gemini generation failed after {self.MAX_RETRIES} attempts. "
-            f"Last error: {last_error}"
-        )
+    # ================================================================
+    # JSON generation
+    # ================================================================
 
     def generate_json(
         self,
         prompt: str,
         system_prompt: Optional[str] = None,
         temperature: Optional[float] = None,
-    ) -> dict:
-        """
-        Generate text and parse it as JSON.
-        Handles cases where the model wraps JSON in markdown code fences.
-
-        Args:
-            prompt: The generation prompt (should ask for JSON output).
-            system_prompt: Optional system instruction.
-            temperature: Override temperature.
-
-        Returns:
-            Parsed JSON as a Python dict.
-
-        Raises:
-            ValueError: If the response cannot be parsed as JSON.
-        """
-        raw_text = self.generate_text(
+        max_retries: int = 5,
+        model_override: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Generate and parse JSON from Gemini."""
+        raw = self.generate_text(
             prompt=prompt,
             system_prompt=system_prompt,
-            temperature=temperature or 0.3,  # Lower temp for structured output
+            temperature=temperature if temperature is not None else 0.3,
+            max_retries=max_retries,
+            model_override=model_override,
         )
 
         # Strip markdown code fences if present
-        cleaned = raw_text.strip()
-        if cleaned.startswith("```json"):
-            cleaned = cleaned[7:]
-        elif cleaned.startswith("```"):
-            cleaned = cleaned[3:]
-        if cleaned.endswith("```"):
-            cleaned = cleaned[:-3]
-        cleaned = cleaned.strip()
+        cleaned = re.sub(r"```(?:json)?\s*", "", raw)
+        cleaned = re.sub(r"```\s*$", "", cleaned).strip()
 
-        try:
-            return json.loads(cleaned)
-        except json.JSONDecodeError as exc:
-            logger.error(
-                "Failed to parse Gemini JSON response. Raw text:\n%s", raw_text[:500]
-            )
-            raise ValueError(
-                f"Gemini returned invalid JSON: {exc}. "
-                f"Response preview: {raw_text[:200]}"
-            ) from exc
+        return json.loads(cleaned)
 
-    def generate_embedding(
-        self,
-        text: str,
-        task_type: str = "retrieval_document",
-    ) -> list[float]:
-        """
-        Generate an embedding vector for the given text.
+    # ================================================================
+    # Embeddings
+    # ================================================================
 
-        Args:
-            text: The text to embed.
-            task_type: Embedding task type. Options:
-                - "retrieval_document" — for storing documents
-                - "retrieval_query" — for search queries
-                - "semantic_similarity" — for comparing texts
-
-        Returns:
-            List of floats representing the embedding vector.
-        """
-        last_error = None
-        for attempt in range(1, self.MAX_RETRIES + 1):
+    def generate_embedding(self, text: str, max_retries: int = 5) -> List[float]:
+        """Generate a single embedding vector via REST."""
+        url = f"{_BASE}/{self._embed_model}:embedContent?key={self._api_key}"
+        payload = {
+            "model": self._embed_model,
+            "content": {"parts": [{"text": text}]},
+            "taskType": "RETRIEVAL_DOCUMENT",
+        }
+        for attempt in range(max_retries + 1):
             try:
-                result = genai.embed_content(
-                    model="models/embedding-001",
-                    content=text,
-                    task_type=task_type,
-                )
-                embedding = result["embedding"]
-                logger.debug(
-                    "Generated embedding: dim=%d, text_len=%d",
-                    len(embedding),
-                    len(text),
-                )
-                return embedding
-
-            except Exception as exc:
-                last_error = exc
-                delay = self.BASE_DELAY * (2 ** (attempt - 1))
-                logger.warning(
-                    "Embedding attempt %d failed: %s — retrying in %ds...",
-                    attempt,
-                    str(exc)[:200],
-                    delay,
-                )
-                time.sleep(delay)
-
-        raise RuntimeError(
-            f"Embedding generation failed after {self.MAX_RETRIES} attempts. "
-            f"Last error: {last_error}"
-        )
+                resp = requests.post(url, json=payload, timeout=self._timeout)
+                if resp.status_code in (429, 503):
+                    retry_after = resp.headers.get("Retry-After")
+                    if retry_after and resp.status_code == 429:
+                        time.sleep(float(retry_after))
+                    else:
+                        time.sleep(2**attempt + random.uniform(0, 1))
+                    if attempt < max_retries:
+                        logger.warning("Embedding %d on attempt %d, retrying...", resp.status_code, attempt + 1)
+                        continue
+                    resp.raise_for_status()
+                elif resp.status_code >= 400:
+                    resp.raise_for_status()
+                return resp.json()["embedding"]["values"]
+            except requests.exceptions.HTTPError:
+                raise
+            except Exception as e:
+                logger.warning("Embedding attempt %d failed: %s", attempt + 1, e)
+                if attempt < max_retries:
+                    time.sleep(2**attempt + random.uniform(0, 1))
+                else:
+                    raise
 
     def generate_embeddings_batch(
-        self,
-        texts: list[str],
-        task_type: str = "retrieval_document",
-    ) -> list[list[float]]:
-        """
-        Generate embeddings for multiple texts.
-
-        Args:
-            texts: List of texts to embed.
-            task_type: Embedding task type.
-
-        Returns:
-            List of embedding vectors (one per input text).
-        """
-        embeddings = []
-        for i, text in enumerate(texts):
-            logger.debug("Batch embedding %d/%d...", i + 1, len(texts))
-            emb = self.generate_embedding(text, task_type)
-            embeddings.append(emb)
-            # Small delay to avoid rate limits on Pi
-            if i < len(texts) - 1:
+        self, texts: List[str], batch_size: int = 20, max_retries: int = 5
+    ) -> List[List[float]]:
+        """Generate embeddings for a batch of texts via REST."""
+        url = f"{_BASE}/{self._embed_model}:batchEmbedContents?key={self._api_key}"
+        all_embeddings: List[List[float]] = []
+        for i in range(0, len(texts), batch_size):
+            batch = texts[i : i + batch_size]
+            requests_list = [
+                {
+                    "model": self._embed_model,
+                    "content": {"parts": [{"text": t}]},
+                    "taskType": "RETRIEVAL_DOCUMENT",
+                }
+                for t in batch
+            ]
+            for attempt in range(max_retries + 1):
+                try:
+                    resp = requests.post(
+                        url, json={"requests": requests_list}, timeout=self._timeout
+                    )
+                    if resp.status_code in (429, 503):
+                        retry_after = resp.headers.get("Retry-After")
+                        if retry_after and resp.status_code == 429:
+                            time.sleep(float(retry_after))
+                        else:
+                            time.sleep(2**attempt + random.uniform(0, 1))
+                        if attempt < max_retries:
+                            logger.warning("Batch embedding %d on attempt %d, retrying...", resp.status_code, attempt + 1)
+                            continue
+                        resp.raise_for_status()
+                    elif resp.status_code >= 400:
+                        resp.raise_for_status()
+                    for emb in resp.json()["embeddings"]:
+                        all_embeddings.append(emb["values"])
+                    break
+                except requests.exceptions.HTTPError:
+                    raise
+                except Exception as e:
+                    logger.warning("Batch embedding attempt %d failed: %s", attempt + 1, e)
+                    if attempt < max_retries:
+                        time.sleep(2**attempt + random.uniform(0, 1))
+                    else:
+                        raise
+            if i + batch_size < len(texts):
                 time.sleep(0.5)
-        return embeddings
+        return all_embeddings

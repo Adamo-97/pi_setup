@@ -29,6 +29,17 @@ def main():
     with open(args.data_file, encoding="utf-8") as f:
         gate_data = json.load(f)
 
+    # Enrich gate data with pipeline state (topic, content_type, etc.)
+    state_file = Path(f"/tmp/pipeline_state_{args.run_id}.json")
+    if state_file.exists():
+        try:
+            state = json.loads(state_file.read_text(encoding="utf-8"))
+            for key in ("proposed_topic", "proposed_content_type", "proposed_angle"):
+                if key in state and key not in gate_data:
+                    gate_data[key] = state[key]
+        except Exception:
+            pass
+
     from services.mattermost_service import MattermostService
     mm = MattermostService()
 
