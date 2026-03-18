@@ -22,6 +22,8 @@ services:
     environment:
       TZ: ${TZ:-Europe/Stockholm}
       HOMEPAGE_ALLOWED_HOSTS: "*"
+      HOMEPAGE_VAR_HOST_IP: ${HOST_IP:-192.168.0.11}
+      HOMEPAGE_VAR_PIHOLE_URL: ${PIHOLE_URL:-http://192.168.0.11:8080}
     ports:
       - "${HOMEPAGE_PORT:-3010}:3000"
     volumes:
@@ -62,7 +64,7 @@ services:
       test:
         [
           "CMD-SHELL",
-          "wget -qO- http://localhost:3001/api/status-page/heartbeat || exit 1",
+          "curl -sf http://localhost:3001 || exit 1",
         ]
       interval: 30s
       timeout: 10s
