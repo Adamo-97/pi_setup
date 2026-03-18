@@ -1,75 +1,62 @@
-# ============================================================================
-# Homepage — Services Grid
-# ============================================================================
-# Each group appears as a card section on the dashboard.
-# Adjust URLs to match your Raspberry Pi's IP address.
-# ============================================================================
-
-- Content Pipelines:
-    - YouTube Pipeline:
-        icon: youtube.svg
-        href: "{{HOMEPAGE_VAR_N8N_YOUTUBE_URL}}"
-        description: n8n workflow — YouTube gaming videos
+- Shared Services:
+    - n8n:
+        icon: n8n.svg
+        href: http://{{HOMEPAGE_VAR_HOST_IP}}:5678
+        description: Workflow engine (all pipelines)
         server: pi-docker
-        container: n8n_youtube
-        widget:
-          type: n8n
-          url: "{{HOMEPAGE_VAR_N8N_YOUTUBE_URL}}"
+        container: n8n
 
-    - TikTok Pipeline:
-        icon: tiktok.svg
-        href: "{{HOMEPAGE_VAR_N8N_TIKTOK_URL}}"
-        description: n8n workflow — TikTok short clips
+    - Mattermost:
+        icon: mattermost.svg
+        href: http://{{HOMEPAGE_VAR_HOST_IP}}:8065
+        description: Pipeline approval hub
         server: pi-docker
-        container: n8n_tiktok
-        widget:
-          type: n8n
-          url: "{{HOMEPAGE_VAR_N8N_TIKTOK_URL}}"
+        container: mattermost
 
-    - Instagram Pipeline:
-        icon: instagram.svg
-        href: "{{HOMEPAGE_VAR_N8N_INSTAGRAM_URL}}"
-        description: n8n workflow — Instagram Reels
-        server: pi-docker
-        container: n8n_instagram
-        widget:
-          type: n8n
-          url: "{{HOMEPAGE_VAR_N8N_INSTAGRAM_URL}}"
-
-    - X Pipeline:
-        icon: twitter.svg
-        href: "{{HOMEPAGE_VAR_N8N_X_URL}}"
-        description: n8n workflow — X/Twitter posts
-        server: pi-docker
-        container: n8n_x
-        widget:
-          type: n8n
-          url: "{{HOMEPAGE_VAR_N8N_X_URL}}"
-
-- Network & Infrastructure:
     - Pi-hole:
         icon: pi-hole.svg
-        href: "{{HOMEPAGE_VAR_PIHOLE_URL}}/admin"
+        href: http://{{HOMEPAGE_VAR_HOST_IP}}:8080/admin
         description: DNS sinkhole & ad blocker
         server: pi-docker
         container: pihole
         widget:
           type: pihole
           url: "{{HOMEPAGE_VAR_PIHOLE_URL}}"
-          key: "{{HOMEPAGE_VAR_PIHOLE_API_KEY}}"
 
-    - Unbound DNS:
-        icon: dns.svg
-        href: "#"
-        description: Recursive DNS resolver (internal)
+- Content Pipelines:
+    - TikTok (DB + Cache):
+        icon: tiktok.svg
+        href: http://{{HOMEPAGE_VAR_HOST_IP}}:5678
+        description: "PostgreSQL :5434 / Redis :6380"
         server: pi-docker
-        container: unbound
+        container: postgres_tiktok
+
+    - Instagram (DB + Cache):
+        icon: instagram.svg
+        href: http://{{HOMEPAGE_VAR_HOST_IP}}:5678
+        description: "PostgreSQL :5435 / Redis :6381"
+        server: pi-docker
+        container: postgres_instagram
+
+    - X/Twitter (DB + Cache):
+        icon: twitter.svg
+        href: http://{{HOMEPAGE_VAR_HOST_IP}}:5678
+        description: "PostgreSQL :5436 / Redis :6382"
+        server: pi-docker
+        container: postgres_x
+
+    - YouTube (DB + Cache):
+        icon: youtube.svg
+        href: http://{{HOMEPAGE_VAR_HOST_IP}}:5678
+        description: "PostgreSQL :5433 / Redis :6379"
+        server: pi-docker
+        container: postgres_youtube
 
 - Monitoring:
     - Uptime Kuma:
         icon: uptime-kuma.svg
         href: http://{{HOMEPAGE_VAR_HOST_IP}}:3001
-        description: Health monitoring & Mattermost alerts
+        description: Health monitoring & alerts
         server: pi-docker
         container: uptime_kuma
         widget:

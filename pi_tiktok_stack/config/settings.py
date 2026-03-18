@@ -109,7 +109,7 @@ class SharedRAWGConfig:
     port: int = 5433
     database: str = "youtube_rag"
     user: str = "yt_readonly"
-    password: str = "readonly_pass_2025"
+    password: str = ""
 
 
 @dataclass(frozen=True)
@@ -320,7 +320,7 @@ class _Settings:
             port=int(e("SHARED_RAWG_PORT", "5433")),
             database=e("SHARED_RAWG_DB", "youtube_rag"),
             user=e("SHARED_RAWG_USER", "yt_readonly"),
-            password=e("SHARED_RAWG_PASSWORD", "readonly_pass_2025"),
+            password=e("SHARED_RAWG_PASSWORD", ""),
         )
 
         self._loaded = True

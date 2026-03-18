@@ -20,15 +20,15 @@ Raspberry Pi 5 — stack index & operations cheatsheet.
 | `pi_tiktok_stack` | PostgreSQL + Redis — TikTok pipeline (5-gate HITL) | ✅ Yes |
 | `pi_instagram_stack` | PostgreSQL + Redis — Instagram Reels pipeline (5-gate HITL) | ✅ Yes |
 | `pi_x_stack` | PostgreSQL + Redis — X/Twitter pipeline (5-gate HITL) | ✅ Yes |
-| `pi_command_center` | Homepage + Uptime Kuma — dashboard & alerts | ❌ No |
+| `pi_command_center` | Homepage + Uptime Kuma — dashboard & alerts | ✅ Yes |
+| `pi_youtube_stack` | PostgreSQL + Redis — YouTube pipeline (in progress) | ✅ Yes |
 | `pi_nextcloud_stack` | Nextcloud + PostgreSQL + Redis + Caddy — cloud storage | ❌ No |
-| `pi_youtube_stack` | n8n + PostgreSQL + Redis — YouTube pipeline (in progress) | ❌ No |
 
 ---
 
 ## Content Pipeline Architecture
 
-All 3 content pipelines (TikTok, Instagram, X) share the same architecture:
+All 4 content pipelines (TikTok, Instagram, X, YouTube) share the same architecture:
 
 ```mermaid
 flowchart LR
@@ -53,15 +53,23 @@ flowchart LR
         X_RD[(Redis :6382)]
     end
 
+    subgraph YouTube["pi_youtube_stack"]
+        YT_PG[(PostgreSQL :5433)]
+        YT_RD[(Redis :6379)]
+    end
+
     N8N --> TikTok
     N8N --> Instagram
     N8N --> X
+    N8N --> YouTube
     TikTok --> MM
     Instagram --> MM
     X --> MM
+    YouTube --> MM
     TikTok --> BUFFER
     Instagram --> BUFFER
     X --> BUFFER
+    YouTube --> BUFFER
 ```
 
 ### 5-Gate Human-in-the-Loop Flow (all platforms)
@@ -120,6 +128,8 @@ Buffer API: `https://api.buffer.com/graphql` (v1 REST API is dead)
 | **n8n** | http://100.113.255.62:5678 | Workflow editor, executions, logs |
 | **Mattermost** | http://100.113.255.62:8065 | Pipeline approval channels |
 | **Pi-hole** | http://100.113.255.62:8080/admin | DNS dashboard |
+| **Homepage** | http://100.113.255.62:3010 | Service dashboard |
+| **Uptime Kuma** | http://100.113.255.62:3001 | Health monitoring & alerts |
 
 ---
 
@@ -154,6 +164,10 @@ docker exec -it <name> sh
 | `redis_x` | 6382 | pi_x_stack | X budget cache |
 | `pihole` | 53 (DNS), 8080 (web) | pi_hole_stack | Ad blocking |
 | `autoheal` | — | pi_hole_stack | Auto-restart unhealthy containers |
+| `postgres_youtube` | 5433 | pi_youtube_stack | YouTube RAG DB |
+| `redis_youtube` | 6379 | pi_youtube_stack | YouTube budget cache |
+| `homepage` | 3010 | pi_command_center | Service dashboard |
+| `uptime_kuma` | 3001 | pi_command_center | Health monitoring |
 
 ---
 
@@ -170,6 +184,9 @@ docker exec -it postgres_instagram psql -U ig_user -d instagram_rag
 
 # X
 docker exec -it postgres_x psql -U x_user -d x_rag
+
+# YouTube
+docker exec -it postgres_youtube psql -U yt_user -d youtube_rag
 ```
 
 **Useful queries:**
@@ -238,7 +255,9 @@ docker ps --format "{{.Names}}: {{.Status}}" | sort
 cd ~/pi_setup/pi_tiktok_stack && docker compose restart
 cd ~/pi_setup/pi_instagram_stack && docker compose restart
 cd ~/pi_setup/pi_x_stack && docker compose restart
+cd ~/pi_setup/pi_youtube_stack && docker compose restart
 cd ~/pi_setup/pi_n8n_stack && docker compose restart
+cd ~/pi_setup/pi_command_center && docker compose restart
 
 # View n8n logs
 docker logs n8n --tail 50 -f
@@ -260,12 +279,16 @@ LAN IP:        192.168.0.11
 n8n:           http://100.113.255.62:5678
 Mattermost:    http://100.113.255.62:8065
 Pi-hole:       http://100.113.255.62:8080/admin
+Homepage:      http://100.113.255.62:3010
+Uptime Kuma:   http://100.113.255.62:3001
 
 TikTok DB:     port 5434  (tt_user / tiktok_rag)
 Instagram DB:  port 5435  (ig_user / instagram_rag)
 X DB:          port 5436  (x_user / x_rag)
+YouTube DB:    port 5433  (yt_user / youtube_rag)
 
 TikTok Redis:  port 6380
 Instagram Redis: port 6381
 X Redis:       port 6382
+YouTube Redis: port 6379
 ```

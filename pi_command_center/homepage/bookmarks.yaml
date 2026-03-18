@@ -1,7 +1,3 @@
-# ============================================================================
-# Homepage — Bookmarks
-# ============================================================================
-
 - Developer:
     - GitHub Repo:
         - icon: github.svg
@@ -14,17 +10,17 @@
           description: Container registry
 
 - Documentation:
-    - Pi-hole Docs:
-        - icon: pi-hole.svg
-          href: https://docs.pi-hole.net
-          description: Pi-hole documentation
+    - Homepage Docs:
+        - icon: homepage.svg
+          href: https://gethomepage.dev
+          description: Homepage dashboard docs
 
     - Uptime Kuma Wiki:
         - icon: uptime-kuma.svg
           href: https://github.com/louislam/uptime-kuma/wiki
           description: Uptime Kuma documentation
 
-    - Homepage Docs:
-        - icon: homepage.svg
-          href: https://gethomepage.dev
-          description: Homepage dashboard docs
+    - n8n Docs:
+        - icon: n8n.svg
+          href: https://docs.n8n.io
+          description: n8n workflow docs

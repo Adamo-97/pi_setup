@@ -49,7 +49,7 @@ class Planner(BaseProcessor):
             "port": int(os.getenv("SHARED_RAWG_PORT", "5433")),
             "dbname": os.getenv("SHARED_RAWG_DB", "youtube_rag"),
             "user": os.getenv("SHARED_RAWG_USER", "yt_readonly"),
-            "password": os.getenv("SHARED_RAWG_PASSWORD", "readonly_pass_2025"),
+            "password": os.getenv("SHARED_RAWG_PASSWORD", ""),
         }
 
     def run(self, **kwargs) -> dict:
